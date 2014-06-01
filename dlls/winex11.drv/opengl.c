@@ -440,6 +440,7 @@ static int GLXErrorHandler(Display *dpy, XErrorEvent *event, void *arg)
 static BOOL X11DRV_WineGL_InitOpenglInfo(void)
 {
     static const char legacy_extensions[] = " WGL_EXT_extensions_string WGL_EXT_swap_control";
+    static const char direct_extension[] = " WINE_EXT_direct_rendering";
 
     int screen = DefaultScreen(gdi_display);
     Window win = 0, root = 0;
@@ -493,16 +494,18 @@ static BOOL X11DRV_WineGL_InitOpenglInfo(void)
     }
     gl_renderer = (const char *)opengl_funcs.gl.p_glGetString(GL_RENDERER);
     gl_version  = (const char *)opengl_funcs.gl.p_glGetString(GL_VERSION);
+    glx_direct = pglXIsDirect(gdi_display, ctx);
     str = (const char *) opengl_funcs.gl.p_glGetString(GL_EXTENSIONS);
-    glExtensions = HeapAlloc(GetProcessHeap(), 0, strlen(str)+sizeof(legacy_extensions));
+    glExtensions = HeapAlloc(GetProcessHeap(), 0, strlen(str)+sizeof(legacy_extensions)+sizeof(direct_extension));
     strcpy(glExtensions, str);
     strcat(glExtensions, legacy_extensions);
+    if (glx_direct)
+        strcat(glExtensions, direct_extension);
 
     /* Get the common GLX version supported by GLX client and server ( major/minor) */
     pglXQueryVersion(gdi_display, &glxVersion[0], &glxVersion[1]);
 
     glxExtensions = pglXQueryExtensionsString(gdi_display, screen);
-    glx_direct = pglXIsDirect(gdi_display, ctx);
 
     TRACE("GL version             : %s.\n", gl_version);
     TRACE("GL renderer            : %s.\n", gl_renderer);
