@@ -65,6 +65,7 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(process);
 WINE_DECLARE_DEBUG_CHANNEL(relay);
+WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
 #ifdef __APPLE__
 extern char **__wine_get_main_environment(void);
@@ -1091,6 +1092,15 @@ void WINAPI start_process( LPTHREAD_START_ROUTINE entry, PEB *peb )
 
     __TRY
     {
+        if (CreateEventA(0, 0, 0, "__winestaging_warn_event") && GetLastError() != ERROR_ALREADY_EXISTS)
+        {
+            FIXME_(winediag)("Wine Staging %s is a testing version containing experimental patches.\n", wine_get_version());
+            FIXME_(winediag)("Please mention your exact version when filing bug reports on winehq.org.\n");
+        }
+        else
+            WARN_(winediag)("Wine Staging %s is a testing version containing experimental patches.\n", wine_get_version());
+
+
         if (!CheckRemoteDebuggerPresent( GetCurrentProcess(), &being_debugged ))
             being_debugged = FALSE;
 
