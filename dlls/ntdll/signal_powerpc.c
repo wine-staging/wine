@@ -1045,6 +1045,12 @@ void signal_init_thread( TEB *teb )
     pthread_setspecific( teb_key, teb );
 }
 
+/**********************************************************************
+ *    signal_init_early
+ */
+void signal_init_early(void)
+{
+}
 
 /**********************************************************************
  *		signal_init_process
