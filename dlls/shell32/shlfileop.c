@@ -59,16 +59,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(shell);
 static const WCHAR wWildcardFile[] = {'*',0};
 static const WCHAR wWildcardChars[] = {'*','?',0};
 
-static DWORD SHNotifyCreateDirectoryA(LPCSTR path, LPSECURITY_ATTRIBUTES sec);
-static DWORD SHNotifyCreateDirectoryW(LPCWSTR path, LPSECURITY_ATTRIBUTES sec);
-static DWORD SHNotifyRemoveDirectoryA(LPCSTR path);
-static DWORD SHNotifyRemoveDirectoryW(LPCWSTR path);
-static DWORD SHNotifyDeleteFileA(LPCSTR path);
-static DWORD SHNotifyDeleteFileW(LPCWSTR path);
-static DWORD SHNotifyMoveFileW(LPCWSTR src, LPCWSTR dest);
-static DWORD SHNotifyCopyFileW(LPCWSTR src, LPCWSTR dest, BOOL bFailIfExists);
-static DWORD SHFindAttrW(LPCWSTR pName, BOOL fileOnly);
-
 typedef struct
 {
     SHFILEOPSTRUCTW *req;
@@ -76,6 +66,42 @@ typedef struct
     BOOL bManyItems;
     BOOL bCancelled;
 } FILE_OPERATION;
+
+typedef struct
+{
+    DWORD attributes;
+    LPWSTR szDirectory;
+    LPWSTR szFilename;
+    LPWSTR szFullPath;
+    BOOL bFromWildcard;
+    BOOL bFromRelative;
+    BOOL bExists;
+} FILE_ENTRY;
+
+typedef struct
+{
+    FILE_ENTRY *feFiles;
+    DWORD num_alloc;
+    DWORD dwNumFiles;
+    BOOL bAnyFromWildcard;
+    BOOL bAnyDirectories;
+    BOOL bAnyDontExist;
+} FILE_LIST;
+
+#define ERROR_SHELL_INTERNAL_FILE_NOT_FOUND 1026
+
+static DWORD SHNotifyCreateDirectoryA(LPCSTR path, LPSECURITY_ATTRIBUTES sec);
+static DWORD SHNotifyCreateDirectoryW(LPCWSTR path, LPSECURITY_ATTRIBUTES sec);
+static DWORD SHNotifyRemoveDirectoryA(LPCSTR path);
+static DWORD SHNotifyRemoveDirectoryW(LPCWSTR path);
+static DWORD SHNotifyDeleteFileA(FILE_OPERATION *op, LPCSTR path);
+static DWORD SHNotifyDeleteFileW(FILE_OPERATION *op, LPCWSTR path);
+static DWORD SHNotifyMoveFileW(FILE_OPERATION *op, LPCWSTR src, LPCWSTR dest);
+static DWORD SHNotifyCopyFileW(FILE_OPERATION *op, LPCWSTR src, LPCWSTR dest, BOOL bFailIfExists);
+static DWORD SHFindAttrW(LPCWSTR pName, BOOL fileOnly);
+
+static int copy_files(FILE_OPERATION *op, BOOL multidest, const FILE_LIST *flFrom, FILE_LIST *flTo);
+static int move_files(FILE_OPERATION *op, BOOL multidest, const FILE_LIST *flFrom, const FILE_LIST *flTo);
 
 /* Confirm dialogs with an optional "Yes To All" as used in file operations confirmations
  */
@@ -343,7 +369,7 @@ HRESULT WINAPI SHIsFileAvailableOffline(LPCWSTR path, LPDWORD status)
  * Asks for confirmation when bShowUI is true and deletes the directory and
  * all its subdirectories and files if necessary.
  */
-static DWORD SHELL_DeleteDirectoryW(HWND hwnd, LPCWSTR pszDir, BOOL bShowUI)
+static DWORD SHELL_DeleteDirectoryW(FILE_OPERATION *op, LPCWSTR pszDir, BOOL bShowUI)
 {
     DWORD    ret = 0;
     HANDLE  hFind;
@@ -353,16 +379,18 @@ static DWORD SHELL_DeleteDirectoryW(HWND hwnd, LPCWSTR pszDir, BOOL bShowUI)
     PathCombineW(szTemp, pszDir, wWildcardFile);
     hFind = FindFirstFileW(szTemp, &wfd);
 
-    if (hFind != INVALID_HANDLE_VALUE) {
-        if (!bShowUI || SHELL_ConfirmDialogW(hwnd, ASK_DELETE_FOLDER, pszDir, NULL)) {
+    if (hFind != INVALID_HANDLE_VALUE)
+    {
+        if (!bShowUI || SHELL_ConfirmDialogW(op->req->hwnd, ASK_DELETE_FOLDER, pszDir, NULL))
+        {
             do {
                 if (IsDotDir(wfd.cFileName))
                     continue;
                 PathCombineW(szTemp, pszDir, wfd.cFileName);
                 if (FILE_ATTRIBUTE_DIRECTORY & wfd.dwFileAttributes)
-                    ret = SHELL_DeleteDirectoryW(hwnd, szTemp, FALSE);
+                    ret = SHELL_DeleteDirectoryW(op, szTemp, FALSE);
                 else
-                    ret = SHNotifyDeleteFileW(szTemp);
+                    ret = SHNotifyDeleteFileW(op, szTemp);
             } while (!ret && FindNextFileW(hFind, &wfd));
         }
         FindClose(hFind);
@@ -493,22 +521,9 @@ BOOL WINAPI Win32RemoveDirectoryAW(LPCVOID path)
     return (SHNotifyRemoveDirectoryA(path) == ERROR_SUCCESS);
 }
 
-/************************************************************************
- * Win32DeleteFile           [SHELL32.164]
- *
- * Deletes a file. Also triggers a change notify if one exists.
- *
- * PARAMS
- *  path       [I]   path to file to delete
- *
- * RETURNS
- *  TRUE if successful, FALSE otherwise
- *
- * NOTES
- *  Verified on Win98 / IE 5 (SHELL32 4.72, March 1999 build) to be ANSI.
- *  This is Unicode on NT/2000
- */
-static DWORD SHNotifyDeleteFileA(LPCSTR path)
+/***********************************************************************/
+
+static DWORD SHNotifyDeleteFileA(FILE_OPERATION *op, LPCSTR path)
 {
     LPWSTR wPath;
     DWORD retCode;
@@ -518,7 +533,7 @@ static DWORD SHNotifyDeleteFileA(LPCSTR path)
     retCode = SHELL32_AnsiToUnicodeBuf(path, &wPath, 0);
     if (!retCode)
     {
-        retCode = SHNotifyDeleteFileW(wPath);
+        retCode = SHNotifyDeleteFileW(op, wPath);
         heap_free(wPath);
     }
     return retCode;
@@ -526,11 +541,13 @@ static DWORD SHNotifyDeleteFileA(LPCSTR path)
 
 /***********************************************************************/
 
-static DWORD SHNotifyDeleteFileW(LPCWSTR path)
+static DWORD SHNotifyDeleteFileW(FILE_OPERATION *op, LPCWSTR path)
 {
     BOOL ret;
 
     TRACE("(%s)\n", debugstr_w(path));
+
+    /* FIXME: Implement progress dialog - op can also be zero! */
 
     ret = DeleteFileW(path);
     if (!ret)
@@ -554,8 +571,8 @@ static DWORD SHNotifyDeleteFileW(LPCWSTR path)
 DWORD WINAPI Win32DeleteFileAW(LPCVOID path)
 {
     if (SHELL_OsIsUnicode())
-        return (SHNotifyDeleteFileW(path) == ERROR_SUCCESS);
-    return (SHNotifyDeleteFileA(path) == ERROR_SUCCESS);
+        return (SHNotifyDeleteFileW(NULL, path) == ERROR_SUCCESS);
+    return (SHNotifyDeleteFileA(NULL, path) == ERROR_SUCCESS);
 }
 
 /************************************************************************
@@ -564,17 +581,20 @@ DWORD WINAPI Win32DeleteFileAW(LPCVOID path)
  * Moves a file. Also triggers a change notify if one exists.
  *
  * PARAMS
+ *  op         [I]   file operation context
  *  src        [I]   path to source file to move
  *  dest       [I]   path to target file to move to
  *
  * RETURNS
  *  ERROR_SUCCESS if successful
  */
-static DWORD SHNotifyMoveFileW(LPCWSTR src, LPCWSTR dest)
+static DWORD SHNotifyMoveFileW(FILE_OPERATION *op, LPCWSTR src, LPCWSTR dest)
 {
     BOOL ret;
 
     TRACE("(%s %s)\n", debugstr_w(src), debugstr_w(dest));
+
+    /* FIXME: Implement progress dialog */
 
     ret = MoveFileExW(src, dest, MOVEFILE_REPLACE_EXISTING);
 
@@ -610,6 +630,7 @@ static DWORD SHNotifyMoveFileW(LPCWSTR src, LPCWSTR dest)
  * Copies a file. Also triggers a change notify if one exists.
  *
  * PARAMS
+ *  op            [I]   file operation context
  *  src           [I]   path to source file to move
  *  dest          [I]   path to target file to move to
  *  bFailIfExists [I]   if TRUE, the target file will not be overwritten if
@@ -618,12 +639,14 @@ static DWORD SHNotifyMoveFileW(LPCWSTR src, LPCWSTR dest)
  * RETURNS
  *  ERROR_SUCCESS if successful
  */
-static DWORD SHNotifyCopyFileW(LPCWSTR src, LPCWSTR dest, BOOL bFailIfExists)
+static DWORD SHNotifyCopyFileW(FILE_OPERATION *op, LPCWSTR src, LPCWSTR dest, BOOL bFailIfExists)
 {
     BOOL ret;
     DWORD attribs;
 
     TRACE("(%s %s %s)\n", debugstr_w(src), debugstr_w(dest), bFailIfExists ? "failIfExists" : "");
+
+    /* FIXME: Update progress dialog */
 
     /* Destination file may already exist with read only attribute */
     attribs = GetFileAttributesW(dest);
@@ -899,30 +922,6 @@ int WINAPI SHFileOperationA(LPSHFILEOPSTRUCTA lpFileOp)
     return retCode;
 }
 
-#define ERROR_SHELL_INTERNAL_FILE_NOT_FOUND 1026
-
-typedef struct
-{
-    DWORD attributes;
-    LPWSTR szDirectory;
-    LPWSTR szFilename;
-    LPWSTR szFullPath;
-    BOOL bFromWildcard;
-    BOOL bFromRelative;
-    BOOL bExists;
-} FILE_ENTRY;
-
-typedef struct
-{
-    FILE_ENTRY *feFiles;
-    DWORD num_alloc;
-    DWORD dwNumFiles;
-    BOOL bAnyFromWildcard;
-    BOOL bAnyDirectories;
-    BOOL bAnyDontExist;
-} FILE_LIST;
-
-
 static inline void grow_list(FILE_LIST *list)
 {
     FILE_ENTRY *new = HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, list->feFiles,
@@ -1085,7 +1084,7 @@ static void destroy_file_list(FILE_LIST *flList)
 static void copy_dir_to_dir(FILE_OPERATION *op, const FILE_ENTRY *feFrom, LPCWSTR szDestPath)
 {
     WCHAR szFrom[MAX_PATH], szTo[MAX_PATH];
-    SHFILEOPSTRUCTW fileOp;
+    FILE_LIST flFromNew, flToNew;
 
     static const WCHAR wildCardFiles[] = {'*','.','*',0};
 
@@ -1113,17 +1112,16 @@ static void copy_dir_to_dir(FILE_OPERATION *op, const FILE_ENTRY *feFrom, LPCWST
     PathCombineW(szFrom, feFrom->szFullPath, wildCardFiles);
     szFrom[lstrlenW(szFrom) + 1] = '\0';
 
-    fileOp = *op->req;
-    fileOp.pFrom = szFrom;
-    fileOp.pTo = szTo;
-    fileOp.fFlags &= ~FOF_MULTIDESTFILES; /* we know we're copying to one dir */
+    ZeroMemory(&flFromNew, sizeof(FILE_LIST));
+    ZeroMemory(&flToNew, sizeof(FILE_LIST));
+    parse_file_list(&flFromNew, szFrom);
+    parse_file_list(&flToNew, szTo);
 
-    /* Don't ask the user about overwriting files when he accepted to overwrite the
-       folder. FIXME: this is not exactly what Windows does - e.g. there would be
-       an additional confirmation for a nested folder */
-    fileOp.fFlags |= FOF_NOCONFIRMATION;
+    /* we know we're copying to one dir */
+    copy_files(op, FALSE, &flFromNew, &flToNew);
 
-    SHFileOperationW(&fileOp);
+    destroy_file_list(&flFromNew);
+    destroy_file_list(&flToNew);
 }
 
 static BOOL copy_file_to_file(FILE_OPERATION *op, const WCHAR *szFrom, const WCHAR *szTo)
@@ -1134,7 +1132,7 @@ static BOOL copy_file_to_file(FILE_OPERATION *op, const WCHAR *szFrom, const WCH
             return FALSE;
     }
 
-    return SHNotifyCopyFileW(szFrom, szTo, FALSE) == 0;
+    return SHNotifyCopyFileW(op, szFrom, szTo, FALSE) == 0;
 }
 
 /* copy a file or directory to another directory */
@@ -1174,7 +1172,7 @@ static void create_dest_dirs(LPCWSTR szDestDir)
 }
 
 /* the FO_COPY operation */
-static int copy_files(FILE_OPERATION *op, const FILE_LIST *flFrom, FILE_LIST *flTo)
+static int copy_files(FILE_OPERATION *op, BOOL multidest, const FILE_LIST *flFrom, FILE_LIST *flTo)
 {
     DWORD i;
     const FILE_ENTRY *entryToCopy;
@@ -1197,7 +1195,7 @@ static int copy_files(FILE_OPERATION *op, const FILE_LIST *flFrom, FILE_LIST *fl
         fileDest = &flTo->feFiles[0];
     }
 
-    if (op->req->fFlags & FOF_MULTIDESTFILES)
+    if (multidest)
     {
         if (flFrom->bAnyFromWildcard)
             return ERROR_CANCELLED;
@@ -1249,8 +1247,7 @@ static int copy_files(FILE_OPERATION *op, const FILE_LIST *flFrom, FILE_LIST *fl
     {
         entryToCopy = &flFrom->feFiles[i];
 
-        if ((op->req->fFlags & FOF_MULTIDESTFILES) &&
-            flTo->dwNumFiles > 1)
+        if (multidest && flTo->dwNumFiles > 1)
         {
             fileDest = &flTo->feFiles[i];
         }
@@ -1322,7 +1319,7 @@ static BOOL confirm_delete_list(HWND hWnd, DWORD fFlags, BOOL fTrash, const FILE
 }
 
 /* the FO_DELETE operation */
-static int delete_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom)
+static int delete_files(FILE_OPERATION *op, const FILE_LIST *flFrom)
 {
     const FILE_ENTRY *fileEntry;
     DWORD i;
@@ -1333,13 +1330,13 @@ static int delete_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom)
         return ERROR_SUCCESS;
 
     /* Windows also checks only the first item */
-    bTrash = (lpFileOp->fFlags & FOF_ALLOWUNDO)
+    bTrash = (op->req->fFlags & FOF_ALLOWUNDO)
              && TRASH_CanTrashFile(flFrom->feFiles[0].szFullPath);
 
-    if (!(lpFileOp->fFlags & FOF_NOCONFIRMATION) || (!bTrash && lpFileOp->fFlags & FOF_WANTNUKEWARNING))
-        if (!confirm_delete_list(lpFileOp->hwnd, lpFileOp->fFlags, bTrash, flFrom))
+    if (!(op->req->fFlags & FOF_NOCONFIRMATION) || (!bTrash && op->req->fFlags & FOF_WANTNUKEWARNING))
+        if (!confirm_delete_list(op->req->hwnd, op->req->fFlags, bTrash, flFrom))
         {
-            lpFileOp->fAnyOperationsAborted = TRUE;
+            op->req->fAnyOperationsAborted = TRUE;
             return 0;
         }
 
@@ -1348,7 +1345,7 @@ static int delete_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom)
         fileEntry = &flFrom->feFiles[i];
 
         if (!IsAttribFile(fileEntry->attributes) &&
-            (lpFileOp->fFlags & FOF_FILESONLY && fileEntry->bFromWildcard))
+            (op->req->fFlags & FOF_FILESONLY && fileEntry->bFromWildcard))
             continue;
 
         if (bTrash)
@@ -1358,14 +1355,14 @@ static int delete_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom)
                 continue;
 
             /* Note: Windows silently deletes the file in such a situation, we show a dialog */
-            if (!(lpFileOp->fFlags & FOF_NOCONFIRMATION) || (lpFileOp->fFlags & FOF_WANTNUKEWARNING))
-                bDelete = SHELL_ConfirmDialogW(lpFileOp->hwnd, ASK_CANT_TRASH_ITEM, fileEntry->szFullPath, NULL);
+            if (!(op->req->fFlags & FOF_NOCONFIRMATION) || (op->req->fFlags & FOF_WANTNUKEWARNING))
+                bDelete = SHELL_ConfirmDialogW(op->req->hwnd, ASK_CANT_TRASH_ITEM, fileEntry->szFullPath, NULL);
             else
                 bDelete = TRUE;
 
             if (!bDelete)
             {
-                lpFileOp->fAnyOperationsAborted = TRUE;
+                op->req->fAnyOperationsAborted = TRUE;
                 break;
             }
         }
@@ -1375,7 +1372,7 @@ static int delete_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom)
             ret = DeleteFileW(fileEntry->szFullPath) ?
                   ERROR_SUCCESS : GetLastError();
         else
-            ret = SHELL_DeleteDirectoryW(lpFileOp->hwnd, fileEntry->szFullPath, FALSE);
+            ret = SHELL_DeleteDirectoryW(op, fileEntry->szFullPath, FALSE);
 
         if (ret)
             return ret;
@@ -1385,16 +1382,16 @@ static int delete_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom)
 }
 
 /* moves a file or directory to another directory */
-static void move_to_dir(LPSHFILEOPSTRUCTW lpFileOp, const FILE_ENTRY *feFrom, const FILE_ENTRY *feTo)
+static void move_to_dir(FILE_OPERATION *op, const FILE_ENTRY *feFrom, const FILE_ENTRY *feTo)
 {
     WCHAR szDestPath[MAX_PATH];
 
     PathCombineW(szDestPath, feTo->szFullPath, feFrom->szFilename);
-    SHNotifyMoveFileW(feFrom->szFullPath, szDestPath);
+    SHNotifyMoveFileW(op, feFrom->szFullPath, szDestPath);
 }
 
 /* the FO_MOVE operation */
-static int move_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom, const FILE_LIST *flTo)
+static int move_files(FILE_OPERATION *op, BOOL multidest, const FILE_LIST *flFrom, const FILE_LIST *flTo)
 {
     DWORD i;
     INT mismatched = 0;
@@ -1407,14 +1404,12 @@ static int move_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom, const
     if (!flTo->dwNumFiles)
         return ERROR_FILE_NOT_FOUND;
 
-    if (!(lpFileOp->fFlags & FOF_MULTIDESTFILES) &&
-        flTo->dwNumFiles > 1 && flFrom->dwNumFiles > 1)
+    if (!multidest && flTo->dwNumFiles > 1 && flFrom->dwNumFiles > 1)
     {
         return ERROR_CANCELLED;
     }
 
-    if (!(lpFileOp->fFlags & FOF_MULTIDESTFILES) &&
-        !flFrom->bAnyDirectories &&
+    if (!multidest && !flFrom->bAnyDirectories &&
         flFrom->dwNumFiles > flTo->dwNumFiles)
     {
         return ERROR_CANCELLED;
@@ -1427,7 +1422,7 @@ static int move_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom, const
             return ret;
     }
 
-    if (lpFileOp->fFlags & FOF_MULTIDESTFILES)
+    if (multidest)
         mismatched = flFrom->dwNumFiles - flTo->dwNumFiles;
 
     fileDest = &flTo->feFiles[0];
@@ -1438,7 +1433,7 @@ static int move_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom, const
         if (!PathFileExistsW(fileDest->szDirectory))
             return ERROR_CANCELLED;
 
-        if (lpFileOp->fFlags & FOF_MULTIDESTFILES)
+        if (multidest)
         {
             if (i >= flTo->dwNumFiles)
                 break;
@@ -1452,9 +1447,9 @@ static int move_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom, const
         }
 
         if (fileDest->bExists && IsAttribDir(fileDest->attributes))
-            move_to_dir(lpFileOp, entryToMove, fileDest);
+            move_to_dir(op, entryToMove, fileDest);
         else
-            SHNotifyMoveFileW(entryToMove->szFullPath, fileDest->szFullPath);
+            SHNotifyMoveFileW(op, entryToMove->szFullPath, fileDest->szFullPath);
     }
 
     if (mismatched > 0)
@@ -1469,7 +1464,7 @@ static int move_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom, const
 }
 
 /* the FO_RENAME files */
-static int rename_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom, const FILE_LIST *flTo)
+static int rename_files(FILE_OPERATION *op, const FILE_LIST *flFrom, const FILE_LIST *flTo)
 {
     const FILE_ENTRY *feFrom;
     const FILE_ENTRY *feTo;
@@ -1491,7 +1486,7 @@ static int rename_files(LPSHFILEOPSTRUCTW lpFileOp, const FILE_LIST *flFrom, con
     if (feTo->bExists)
         return ERROR_ALREADY_EXISTS;
 
-    return SHNotifyMoveFileW(feFrom->szFullPath, feTo->szFullPath);
+    return SHNotifyMoveFileW(op, feFrom->szFullPath, feTo->szFullPath);
 }
 
 /* alert the user if an unsupported flag is used */
@@ -1538,16 +1533,16 @@ int WINAPI SHFileOperationW(LPSHFILEOPSTRUCTW lpFileOp)
     switch (lpFileOp->wFunc)
     {
         case FO_COPY:
-            ret = copy_files(&op, &flFrom, &flTo);
+            ret = copy_files(&op, op.req->fFlags & FOF_MULTIDESTFILES, &flFrom, &flTo);
             break;
         case FO_DELETE:
-            ret = delete_files(lpFileOp, &flFrom);
+            ret = delete_files(&op, &flFrom);
             break;
         case FO_MOVE:
-            ret = move_files(lpFileOp, &flFrom, &flTo);
+            ret = move_files(&op, op.req->fFlags & FOF_MULTIDESTFILES, &flFrom, &flTo);
             break;
         case FO_RENAME:
-            ret = rename_files(lpFileOp, &flFrom, &flTo);
+            ret = rename_files(&op, &flFrom, &flTo);
             break;
         default:
             ret = ERROR_INVALID_PARAMETER;
