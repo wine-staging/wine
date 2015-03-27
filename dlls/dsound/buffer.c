@@ -1078,6 +1078,8 @@ HRESULT secondarybuffer_create(DirectSoundDevice *device, const DSBUFFERDESC *ds
 	/* calculate fragment size and write lead */
 	DSOUND_RecalcFormat(dsb);
 
+	dsb->eax.reverb_mix = EAX_REVERBMIX_USEDISTANCE;
+
 	if (dsb->dsbd.dwFlags & DSBCAPS_CTRL3D) {
 		dsb->ds3db_ds3db.dwSize = sizeof(DS3DBUFFER);
 		dsb->ds3db_ds3db.vPosition.x = 0.0;
