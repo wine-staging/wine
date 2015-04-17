@@ -3059,7 +3059,6 @@ todo_wine
     ok( mapping != NULL, "failed to create file mapping\n");
     fdi.DoDeleteFile = TRUE;
     res = pNtSetInformationFile( handle, &io, &fdi, sizeof fdi, FileDispositionInformation );
-    todo_wine
     ok( res == STATUS_CANNOT_DELETE, "unexpected FileDispositionInformation result (expected STATUS_CANNOT_DELETE, got %x)\n", res );
     CloseHandle( handle );
     fileDeleted = GetFileAttributesA( buffer ) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND;
@@ -3093,7 +3092,6 @@ todo_wine
     CloseHandle( mapping );
     fdi.DoDeleteFile = TRUE;
     res = pNtSetInformationFile( handle, &io, &fdi, sizeof fdi, FileDispositionInformation );
-    todo_wine
     ok( res == STATUS_CANNOT_DELETE, "unexpected FileDispositionInformation result (expected STATUS_CANNOT_DELETE, got %x)\n", res );
     CloseHandle( handle );
     fileDeleted = GetFileAttributesA( buffer ) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND;
