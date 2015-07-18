@@ -2279,6 +2279,108 @@ done:
     return status;
 }
 
+#if defined(__i386__)
+#define CURRENT_ARCH IMAGE_FILE_MACHINE_I386
+#elif defined(__x86_64__)
+#define CURRENT_ARCH IMAGE_FILE_MACHINE_AMD64
+#elif defined(__arm__)
+#define CURRENT_ARCH IMAGE_FILE_MACHINE_ARM
+#elif defined(__aarch64__)
+#define CURRENT_ARCH IMAGE_FILE_MACHINE_ARM64
+#endif
+
+/***********************************************************************
+ *  get_machine_type  (internal)
+ *
+ * Determines the machine type of a module. Based on the code in
+ * dlls/kernel32/module.c.
+ */
+static WORD get_machine_type( HANDLE hfile )
+{
+    union
+    {
+        struct
+        {
+            unsigned char magic[4];
+            unsigned char class;
+            unsigned char data;
+            unsigned char version;
+            unsigned char ignored[9];
+            unsigned short type;
+            unsigned short machine;
+        } elf;
+        struct
+        {
+            unsigned int magic;
+            unsigned int cputype;
+            unsigned int cpusubtype;
+            unsigned int filetype;
+        } macho;
+        IMAGE_DOS_HEADER mz;
+    } header;
+
+    IO_STATUS_BLOCK io;
+    LARGE_INTEGER offset;
+
+    /* Seek to the start of the file and read the header information. */
+    offset.QuadPart = 0;
+    if (NtReadFile( hfile, 0, NULL, 0, &io, &header, sizeof(header), &offset, NULL )) return 0;
+    if (io.Information < sizeof(header)) return 0;
+
+    if (!memcmp( header.elf.magic, "\177ELF", 4 ))
+    {
+#ifdef WORDS_BIGENDIAN
+        if (header.elf.data == 1)
+#else
+        if (header.elf.data == 2)
+#endif
+        {
+            header.elf.machine = RtlUshortByteSwap( header.elf.machine );
+        }
+
+        switch(header.elf.machine)
+        {
+            case 3:   return IMAGE_FILE_MACHINE_I386;
+            case 20:  return IMAGE_FILE_MACHINE_POWERPC;
+            case 40:  return IMAGE_FILE_MACHINE_ARMNT;
+            case 50:  return IMAGE_FILE_MACHINE_IA64;
+            case 62:  return IMAGE_FILE_MACHINE_AMD64;
+            case 183: return IMAGE_FILE_MACHINE_ARM64;
+            default:  return 0;
+        }
+    }
+    /* Mach-o File with Endian set to Big Endian or Little Endian */
+    else if (header.macho.magic == 0xfeedface || header.macho.magic == 0xcefaedfe ||
+             header.macho.magic == 0xfeedfacf || header.macho.magic == 0xcffaedfe)
+    {
+        if (header.macho.magic == 0xcefaedfe || header.macho.magic == 0xcffaedfe)
+            header.macho.cputype = RtlUlongByteSwap( header.macho.cputype );
+
+        switch(header.macho.cputype)
+        {
+            case 0x00000007: return IMAGE_FILE_MACHINE_I386;
+            case 0x01000007: return IMAGE_FILE_MACHINE_AMD64;
+            case 0x0000000c: return IMAGE_FILE_MACHINE_ARMNT;
+            case 0x0100000c: return IMAGE_FILE_MACHINE_ARM64;
+            case 0x00000012: return IMAGE_FILE_MACHINE_POWERPC;
+            default:         return 0;
+        }
+    }
+    /* Not ELF, try DOS */
+    else if (header.mz.e_magic == IMAGE_DOS_SIGNATURE)
+    {
+        IMAGE_NT_HEADERS32 ext_header;
+
+        offset.QuadPart = header.mz.e_lfanew;
+        if (NtReadFile( hfile, 0, NULL, 0, &io, &ext_header, sizeof(ext_header), &offset, NULL )) return 0;
+        if (io.Information < sizeof(ext_header)) return 0;
+
+        if (!memcmp( &ext_header.Signature, "PE\0\0", 4 ))
+            return ext_header.FileHeader.Machine;
+    }
+
+    return 0;
+}
 
 /***********************************************************************
  *	open_dll_file
@@ -2325,7 +2427,7 @@ static HANDLE open_dll_file( UNICODE_STRING *nt_name, WINE_MODREF **pwm, struct 
  */
 static NTSTATUS find_dll_file( const WCHAR *load_path, const WCHAR *libname,
                                WCHAR *filename, ULONG *size, WINE_MODREF **pwm,
-                               HANDLE *handle, struct stat *st )
+                               HANDLE *handle, struct stat *st, BOOL check_arch )
 {
     UNICODE_STRING nt_name;
     WCHAR *file_part, *ext, *dllname;
@@ -2370,20 +2472,41 @@ static NTSTATUS find_dll_file( const WCHAR *load_path, const WCHAR *libname,
 
     if (RtlDetermineDosPathNameType_U( libname ) == RELATIVE_PATH)
     {
-        /* we need to search for it */
-        len = RtlDosSearchPath_U( load_path, libname, NULL, *size, filename, &file_part );
-        if (len)
+        while (load_path)
         {
+            /* we need to search for it */
+            len = RtlDosSearchPath_U( load_path, libname, NULL, *size, filename, &file_part );
+            if (!len) break;
+
             if (len >= *size) goto overflow;
             if ((*pwm = find_fullname_module( filename ))) goto found;
+            if (!handle) goto next;
 
             if (!RtlDosPathNameToNtPathName_U( filename, &nt_name, NULL, NULL ))
             {
                 RtlFreeHeap( GetProcessHeap(), 0, dllname );
                 return STATUS_NO_MEMORY;
             }
+
             *handle = open_dll_file( &nt_name, pwm, st );
-            goto found;
+
+        #ifdef CURRENT_ARCH
+            if (*handle && check_arch)
+            {
+                WORD machine_type = get_machine_type( *handle );
+                if (machine_type && machine_type != CURRENT_ARCH)
+                {
+                    FIXME( "skipping %s because of wrong architecture\n", debugstr_w(filename) );
+                    NtClose( *handle );
+                    *handle = 0;
+                }
+            }
+        #endif
+            if (*handle) goto found;
+
+        next:
+            load_path = strchrW(load_path, ';');
+            if (load_path) load_path++;
         }
 
         /* not found */
@@ -2433,6 +2556,7 @@ overflow:
  */
 static NTSTATUS load_dll( LPCWSTR load_path, LPCWSTR libname, DWORD flags, WINE_MODREF** pwm )
 {
+    BOOL data = flags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE);
     enum loadorder loadorder;
     WCHAR buffer[64];
     WCHAR *filename;
@@ -2449,7 +2573,7 @@ static NTSTATUS load_dll( LPCWSTR load_path, LPCWSTR libname, DWORD flags, WINE_
     size = sizeof(buffer);
     for (;;)
     {
-        nts = find_dll_file( load_path, libname, filename, &size, pwm, &handle, &st );
+        nts = find_dll_file( load_path, libname, filename, &size, pwm, &handle, &st, !data );
         if (nts == STATUS_SUCCESS) break;
         if (filename != buffer) RtlFreeHeap( GetProcessHeap(), 0, filename );
         if (nts != STATUS_BUFFER_TOO_SMALL) return nts;
@@ -2588,7 +2712,7 @@ NTSTATUS WINAPI LdrGetDllHandle( LPCWSTR load_path, ULONG flags, const UNICODE_S
     size = sizeof(buffer);
     for (;;)
     {
-        status = find_dll_file( load_path, name->Buffer, filename, &size, &wm, &handle, &st );
+        status = find_dll_file( load_path, name->Buffer, filename, &size, &wm, &handle, &st, TRUE );
         if (handle) NtClose( handle );
         if (filename != buffer) RtlFreeHeap( GetProcessHeap(), 0, filename );
         if (status != STATUS_BUFFER_TOO_SMALL) break;
