@@ -15106,6 +15106,31 @@ static void test_killfocus(void)
     UnregisterClassA("ddraw_killfocus_wndproc_wc", GetModuleHandleA(NULL));
 }
 
+static void test_caps(void)
+{
+    IDirectDraw7 *ddraw;
+    DDCAPS caps, caps2;
+    HRESULT hr;
+
+    ddraw = create_ddraw();
+    ok(!!ddraw, "Failed to create a ddraw object.\n");
+
+    caps.dwSize = sizeof(caps);
+    caps2.dwSize = sizeof(caps2);
+    hr = IDirectDraw7_GetCaps(ddraw, &caps, &caps2);
+    ok(SUCCEEDED(hr), "Failed to query for caps, hr %#x.\n", hr);
+
+    ok(caps.ddsOldCaps.dwCaps == caps.ddsCaps.dwCaps,
+       "Expected hal ddsOldCaps and ddsCaps to be identical (%x vs %x).\n",
+       caps.ddsOldCaps.dwCaps, caps.ddsCaps.dwCaps);
+
+    ok(caps2.ddsOldCaps.dwCaps == caps2.ddsCaps.dwCaps,
+       "Expected hel ddsOldCaps and ddsCaps to be identical (%x vs %x).\n",
+       caps2.ddsOldCaps.dwCaps, caps2.ddsCaps.dwCaps);
+
+    IDirectDraw7_Release(ddraw);
+}
+
 START_TEST(ddraw7)
 {
     DDDEVICEIDENTIFIER2 identifier;
@@ -15243,6 +15268,7 @@ START_TEST(ddraw7)
     test_enum_surfaces();
     test_viewport();
     test_device_load();
+    test_caps();
     test_color_vertex();
     test_killfocus();
 }

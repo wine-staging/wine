@@ -11543,6 +11543,31 @@ static void test_execute_data(void)
     DestroyWindow(window);
 }
 
+static void test_caps(void)
+{
+    IDirectDraw *ddraw;
+    DDCAPS caps, caps2;
+    HRESULT hr;
+
+    ddraw = create_ddraw();
+    ok(!!ddraw, "Failed to create a ddraw object.\n");
+
+    caps.dwSize = sizeof(caps);
+    caps2.dwSize = sizeof(caps2);
+    hr = IDirectDraw_GetCaps(ddraw, &caps, &caps2);
+    ok(SUCCEEDED(hr), "Failed to query for caps, hr %#x.\n", hr);
+
+    ok(caps.ddsOldCaps.dwCaps == caps.ddsCaps.dwCaps,
+       "Expected hal ddsOldCaps and ddsCaps to be identical (%x vs %x).\n",
+       caps.ddsOldCaps.dwCaps, caps.ddsCaps.dwCaps);
+
+    ok(caps2.ddsOldCaps.dwCaps == caps2.ddsCaps.dwCaps,
+       "Expected hel ddsOldCaps and ddsCaps to be identical (%x vs %x).\n",
+       caps2.ddsOldCaps.dwCaps, caps2.ddsCaps.dwCaps);
+
+    IDirectDraw_Release(ddraw);
+}
+
 static void test_viewport(void)
 {
     static struct
@@ -12030,6 +12055,7 @@ START_TEST(ddraw1)
     test_depth_readback();
     test_clear();
     test_enum_surfaces();
+    test_caps();
     test_execute_data();
     test_viewport();
     test_find_device();
