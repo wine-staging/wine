@@ -2990,9 +2990,6 @@ BOOL WINAPI SetupDiGetDeviceInterfaceDetailA(
         else
             DeviceInterfaceDetailData->DevicePath[0] = '\0';
 
-        if (device_data && device_data->cbSize == sizeof(SP_DEVINFO_DATA))
-            copy_device_data(device_data, iface->device);
-
         ret = TRUE;
     }
     else
@@ -3001,6 +2998,10 @@ BOOL WINAPI SetupDiGetDeviceInterfaceDetailA(
             *RequiredSize = bytesNeeded;
         SetLastError(ERROR_INSUFFICIENT_BUFFER);
     }
+
+    if (device_data && device_data->cbSize == sizeof(SP_DEVINFO_DATA))
+        copy_device_data(device_data, iface->device);
+
     return ret;
 }
 
@@ -3060,9 +3061,6 @@ BOOL WINAPI SetupDiGetDeviceInterfaceDetailW(
         else
             DeviceInterfaceDetailData->DevicePath[0] = '\0';
 
-        if (device_data && device_data->cbSize == sizeof(SP_DEVINFO_DATA))
-            copy_device_data(device_data, iface->device);
-
         ret = TRUE;
     }
     else
@@ -3071,6 +3069,10 @@ BOOL WINAPI SetupDiGetDeviceInterfaceDetailW(
             *RequiredSize = bytesNeeded;
         SetLastError(ERROR_INSUFFICIENT_BUFFER);
     }
+
+    if (device_data && device_data->cbSize == sizeof(SP_DEVINFO_DATA))
+        copy_device_data(device_data, iface->device);
+
     return ret;
 }
 
