@@ -5790,7 +5790,27 @@ void texture_activate_dimensions(const struct wined3d_texture *texture, const st
     {
         switch (texture->target)
         {
+            case GL_TEXTURE_1D:
+                gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_2D);
+                checkGLcall("glDisable(GL_TEXTURE_2D)");
+                gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_3D);
+                checkGLcall("glDisable(GL_TEXTURE_3D)");
+                if (gl_info->supported[ARB_TEXTURE_CUBE_MAP])
+                {
+                    gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_CUBE_MAP_ARB);
+                    checkGLcall("glDisable(GL_TEXTURE_CUBE_MAP_ARB)");
+                }
+                if (gl_info->supported[ARB_TEXTURE_RECTANGLE])
+                {
+                    gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_RECTANGLE_ARB);
+                    checkGLcall("glDisable(GL_TEXTURE_RECTANGLE_ARB)");
+                }
+                gl_info->gl_ops.gl.p_glEnable(GL_TEXTURE_1D);
+                checkGLcall("glEnable(GL_TEXTURE_1D)");
+                break;
             case GL_TEXTURE_2D:
+                gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_1D);
+                checkGLcall("glDisable(GL_TEXTURE_1D)");
                 gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_3D);
                 checkGLcall("glDisable(GL_TEXTURE_3D)");
                 if (gl_info->supported[ARB_TEXTURE_CUBE_MAP])
@@ -5807,6 +5827,8 @@ void texture_activate_dimensions(const struct wined3d_texture *texture, const st
                 checkGLcall("glEnable(GL_TEXTURE_2D)");
                 break;
             case GL_TEXTURE_RECTANGLE_ARB:
+                gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_1D);
+                checkGLcall("glDisable(GL_TEXTURE_1D)");
                 gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_2D);
                 checkGLcall("glDisable(GL_TEXTURE_2D)");
                 gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_3D);
@@ -5830,12 +5852,16 @@ void texture_activate_dimensions(const struct wined3d_texture *texture, const st
                     gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_RECTANGLE_ARB);
                     checkGLcall("glDisable(GL_TEXTURE_RECTANGLE_ARB)");
                 }
+                gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_1D);
+                checkGLcall("glDisable(GL_TEXTURE_1D)");
                 gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_2D);
                 checkGLcall("glDisable(GL_TEXTURE_2D)");
                 gl_info->gl_ops.gl.p_glEnable(GL_TEXTURE_3D);
                 checkGLcall("glEnable(GL_TEXTURE_3D)");
                 break;
             case GL_TEXTURE_CUBE_MAP_ARB:
+                gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_1D);
+                checkGLcall("glDisable(GL_TEXTURE_1D)");
                 gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_2D);
                 checkGLcall("glDisable(GL_TEXTURE_2D)");
                 gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_3D);
@@ -5852,6 +5878,8 @@ void texture_activate_dimensions(const struct wined3d_texture *texture, const st
     }
     else
     {
+        gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_1D);
+        checkGLcall("glDisable(GL_TEXTURE_1D)");
         gl_info->gl_ops.gl.p_glEnable(GL_TEXTURE_2D);
         checkGLcall("glEnable(GL_TEXTURE_2D)");
         gl_info->gl_ops.gl.p_glDisable(GL_TEXTURE_3D);
