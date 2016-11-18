@@ -35,6 +35,7 @@
 #include "msstyles.h"
 
 #include "wine/unicode.h"
+#include "wine/exception.h"
 #include "wine/debug.h"
 #include "wine/heap.h"
 
@@ -56,6 +57,8 @@ extern int alphaBlendMode;
 static const WCHAR szThemesIniResource[] = {
     't','h','e','m','e','s','_','i','n','i','\0'
 };
+
+#define THEME_CLASS_SIGNATURE (('T' << 24) | ('H' << 16) | ('E' << 8) | 'M')
 
 static PTHEME_FILE tfActiveTheme;
 
@@ -221,6 +224,7 @@ void MSSTYLES_CloseThemeFile(PTHEME_FILE tf)
                         pcls->partstate = ps->next;
                         heap_free(ps);
                     }
+                    pcls->signature = 0;
                     heap_free(pcls);
                 }
             }
@@ -452,6 +456,7 @@ static PTHEME_CLASS MSSTYLES_AddClass(PTHEME_FILE tf, LPCWSTR pszAppName, LPCWST
     if(cur) return cur;
 
     cur = heap_alloc(sizeof(*cur));
+    cur->signature = THEME_CLASS_SIGNATURE;
     cur->hTheme = tf->hTheme;
     lstrcpyW(cur->szAppName, pszAppName);
     lstrcpyW(cur->szClassName, pszClassName);
@@ -1045,6 +1050,23 @@ PTHEME_CLASS MSSTYLES_OpenThemeClass(LPCWSTR pszAppName, LPCWSTR pszClassList)
  */
 HRESULT MSSTYLES_CloseThemeClass(PTHEME_CLASS tc)
 {
+    __TRY
+    {
+        if (tc->signature != THEME_CLASS_SIGNATURE)
+            tc = NULL;
+    }
+    __EXCEPT_PAGE_FAULT
+    {
+        tc = NULL;
+    }
+    __ENDTRY
+
+    if (!tc)
+    {
+        WARN("Invalid theme class handle\n");
+        return E_HANDLE;
+    }
+
     MSSTYLES_CloseThemeFile (tc->tf);
     return S_OK;
 }
