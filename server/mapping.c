@@ -580,11 +580,10 @@ static unsigned int get_image_params( struct mapping *mapping, file_pos_t file_s
     if (dos.e_magic != IMAGE_DOS_SIGNATURE) return STATUS_INVALID_IMAGE_NOT_MZ;
     pos = dos.e_lfanew;
 
+    /* zero out header in the case it's not present or partial */
+    memset( &nt, 0, sizeof(nt) );
     size = pread( unix_fd, &nt, sizeof(nt), pos );
     if (size < sizeof(nt.Signature) + sizeof(nt.FileHeader)) return STATUS_INVALID_IMAGE_FORMAT;
-    /* zero out Optional header in the case it's not present or partial */
-    size = min( size, sizeof(nt.Signature) + sizeof(nt.FileHeader) + nt.FileHeader.SizeOfOptionalHeader );
-    if (size < sizeof(nt)) memset( (char *)&nt + size, 0, sizeof(nt) - size );
     if (nt.Signature != IMAGE_NT_SIGNATURE)
     {
         if (*(WORD *)&nt.Signature == IMAGE_OS2_SIGNATURE) return STATUS_INVALID_IMAGE_NE_FORMAT;
@@ -594,6 +593,10 @@ static unsigned int get_image_params( struct mapping *mapping, file_pos_t file_s
     switch (nt.opt.hdr32.Magic)
     {
     case IMAGE_NT_OPTIONAL_HDR32_MAGIC:
+        /* All fields up to CheckSum are mandatory regardless of SizeOfOptionalHeader value */
+        size = max( nt.FileHeader.SizeOfOptionalHeader, offsetof(IMAGE_OPTIONAL_HEADER32, CheckSum) );
+        if (size < sizeof(nt.opt.hdr32)) memset( (char *)&nt.opt.hdr32 + size, 0, sizeof(nt.opt.hdr32) - size );
+
         switch (nt.FileHeader.Machine)
         {
         case IMAGE_FILE_MACHINE_I386:
@@ -636,6 +639,10 @@ static unsigned int get_image_params( struct mapping *mapping, file_pos_t file_s
         break;
 
     case IMAGE_NT_OPTIONAL_HDR64_MAGIC:
+        /* All fields up to CheckSum are mandatory regardless of SizeOfOptionalHeader value */
+        size = max( nt.FileHeader.SizeOfOptionalHeader, offsetof(IMAGE_OPTIONAL_HEADER64, CheckSum) );
+        if (size < sizeof(nt.opt.hdr64)) memset( (char *)&nt.opt.hdr64 + size, 0, sizeof(nt.opt.hdr64) - size );
+
         if (!(cpu_mask & CPU_64BIT_MASK)) return STATUS_INVALID_IMAGE_WIN_64;
         switch (nt.FileHeader.Machine)
         {
