@@ -70,7 +70,7 @@ HRESULT ddraw_surface_update_frontbuffer(struct ddraw_surface *surface,
     if (w <= 0 || h <= 0)
         return DD_OK;
 
-    if (surface->ddraw->swapchain_window)
+    if (surface->ddraw->swapchain_window && !(surface->ddraw->flags & DDRAW_GDI_FLIP))
     {
         /* Nothing to do, we control the frontbuffer, or at least the parts we
          * care about. */
