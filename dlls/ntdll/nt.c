@@ -127,6 +127,19 @@ struct smbios_chassis {
 #define FIRM 0x4649524D
 #define RSMB 0x52534D42
 
+static DWORD translate_object_index(DWORD index)
+{
+    WORD version = MAKEWORD(NtCurrentTeb()->Peb->OSMinorVersion, NtCurrentTeb()->Peb->OSMajorVersion);
+
+    /* Process Hacker depends on this logic */
+    if (version >= 0x0602)
+        return index;
+    else if (version == 0x0601)
+        return index + 2;
+    else
+        return index + 1;
+}
+
 /*
  *	Token
  */
@@ -2658,7 +2671,7 @@ NTSTATUS WINAPI NtQuerySystemInformation(
                         shi->Handle[i].OwnerPid     = info[i].owner;
                         shi->Handle[i].HandleValue  = info[i].handle;
                         shi->Handle[i].AccessMask   = info[i].access;
-                        shi->Handle[i].ObjectType   = info[i].type;
+                        shi->Handle[i].ObjectType   = translate_object_index(info[i].type);
                         /* FIXME: Fill out HandleFlags, ObjectPointer */
                     }
                 }
@@ -2710,7 +2723,7 @@ NTSTATUS WINAPI NtQuerySystemInformation(
                         shi->Handle[i].UniqueProcessId = info[i].owner;
                         shi->Handle[i].HandleValue     = info[i].handle;
                         shi->Handle[i].GrantedAccess   = info[i].access;
-                        shi->Handle[i].ObjectTypeIndex = info[i].type;
+                        shi->Handle[i].ObjectTypeIndex = translate_object_index(info[i].type);
                         /* FIXME: Fill out remaining fields */
                     }
                 }
