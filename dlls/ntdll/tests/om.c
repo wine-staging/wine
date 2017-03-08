@@ -1599,7 +1599,7 @@ static void test_query_object_types(void)
 
         if (i == 0)
         {
-            todo_wine ok( type->TypeName.Length == sizeof(typeW) && !strncmpW(typeW, type->TypeName.Buffer, 4),
+            ok( type->TypeName.Length == sizeof(typeW) && !strncmpW(typeW, type->TypeName.Buffer, 4),
                 "Expected 'Type' as first type, got %s\n", wine_dbgstr_us(&type->TypeName) );
         }
 
