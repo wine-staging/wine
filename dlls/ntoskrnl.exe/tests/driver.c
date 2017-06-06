@@ -22,6 +22,9 @@
 
 #include <stdarg.h>
 
+#define NONAMELESSUNION
+#define NONAMELESSSTRUCT
+
 #include "ntstatus.h"
 #define WIN32_NO_STATUS
 #include "windef.h"
@@ -525,6 +528,33 @@ static void test_version(void)
     ok(*pNtBuildNumber == build, "Expected build number %u, got %u\n", build, *pNtBuildNumber);
 }
 
+static void test_lookaside_list(void)
+{
+    NPAGED_LOOKASIDE_LIST list;
+    ULONG tag = 0x454e4957; /* WINE */
+
+    ExInitializeNPagedLookasideList(&list, NULL, NULL, POOL_NX_ALLOCATION, LOOKASIDE_MINIMUM_BLOCK_SIZE, tag, 0);
+    ok(list.L.Depth == 4, "Expected 4 got %u\n", list.L.Depth);
+    ok(list.L.MaximumDepth == 256, "Expected 256 got %u\n", list.L.MaximumDepth);
+    ok(list.L.TotalAllocates == 0, "Expected 0 got %u\n", list.L.TotalAllocates);
+    ok(list.L.u2.AllocateMisses == 0, "Expected 0 got %u\n", list.L.u2.AllocateMisses);
+    ok(list.L.TotalFrees == 0, "Expected 0 got %u\n", list.L.TotalFrees);
+    ok(list.L.u3.FreeMisses == 0, "Expected 0 got %u\n", list.L.u3.FreeMisses);
+    ok(list.L.Type == (NonPagedPool|POOL_NX_ALLOCATION),
+       "Expected NonPagedPool|POOL_NX_ALLOCATION got %u\n", list.L.Type);
+    ok(list.L.Tag == tag, "Expected %x got %x\n", tag, list.L.Tag);
+    ok(list.L.Size == LOOKASIDE_MINIMUM_BLOCK_SIZE,
+       "Expected %u got %u\n", LOOKASIDE_MINIMUM_BLOCK_SIZE, list.L.Size);
+    ok(list.L.LastTotalAllocates == 0,"Expected 0 got %u\n", list.L.LastTotalAllocates);
+    ok(list.L.u6.LastAllocateMisses == 0,"Expected 0 got %u\n", list.L.u6.LastAllocateMisses);
+    ExDeleteNPagedLookasideList(&list);
+
+    list.L.Depth = 0;
+    ExInitializeNPagedLookasideList(&list, NULL, NULL, 0, LOOKASIDE_MINIMUM_BLOCK_SIZE, tag, 20);
+    ok(list.L.Depth == 4, "Expected 4 got %u\n", list.L.Depth);
+    ExDeleteNPagedLookasideList(&list);
+}
+
 static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)
 {
     ULONG length = stack->Parameters.DeviceIoControl.OutputBufferLength;
@@ -555,6 +585,7 @@ static NTSTATUS main_test(IRP *irp, IO_STACK_LOCATION *stack, ULONG_PTR *info)
     test_load_driver();
     test_sync();
     test_version();
+    test_lookaside_list();
 
     /* print process report */
     if (test_input->winetest_debug)
@@ -606,7 +637,7 @@ static NTSTATUS test_load_driver_ioctl(IRP *irp, IO_STACK_LOCATION *stack, ULONG
 
 static NTSTATUS WINAPI driver_Create(DEVICE_OBJECT *device, IRP *irp)
 {
-    irp->IoStatus.Status = STATUS_SUCCESS;
+    irp->IoStatus.u.Status = STATUS_SUCCESS;
     IoCompleteRequest(irp, IO_NO_INCREMENT);
     return STATUS_SUCCESS;
 }
@@ -631,14 +662,14 @@ static NTSTATUS WINAPI driver_IoControl(DEVICE_OBJECT *device, IRP *irp)
             break;
     }
 
-    irp->IoStatus.Status = status;
+    irp->IoStatus.u.Status = status;
     IoCompleteRequest(irp, IO_NO_INCREMENT);
     return status;
 }
 
 static NTSTATUS WINAPI driver_Close(DEVICE_OBJECT *device, IRP *irp)
 {
-    irp->IoStatus.Status = STATUS_SUCCESS;
+    irp->IoStatus.u.Status = STATUS_SUCCESS;
     IoCompleteRequest(irp, IO_NO_INCREMENT);
     return STATUS_SUCCESS;
 }
