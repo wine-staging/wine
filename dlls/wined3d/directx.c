@@ -122,6 +122,7 @@ static const struct wined3d_extension_map gl_extension_map[] =
     {"GL_ARB_cull_distance",                ARB_CULL_DISTANCE             },
     {"GL_ARB_debug_output",                 ARB_DEBUG_OUTPUT              },
     {"GL_ARB_depth_buffer_float",           ARB_DEPTH_BUFFER_FLOAT        },
+    {"GL_ARB_depth_clamp",                  ARB_DEPTH_CLAMP               },
     {"GL_ARB_depth_texture",                ARB_DEPTH_TEXTURE             },
     {"GL_ARB_derivative_control",           ARB_DERIVATIVE_CONTROL        },
     {"GL_ARB_draw_buffers",                 ARB_DRAW_BUFFERS              },

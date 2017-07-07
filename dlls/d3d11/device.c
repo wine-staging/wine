@@ -2303,6 +2303,7 @@ static void STDMETHODCALLTYPE d3d11_immediate_context_RSSetState(ID3D11DeviceCon
         wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_CULLMODE, WINED3D_CULL_BACK);
         wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_SLOPESCALEDEPTHBIAS, 0);
         wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_DEPTHBIAS, 0);
+        wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_DEPTHCLIP, TRUE);
         wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_SCISSORTESTENABLE, FALSE);
         wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_MULTISAMPLEANTIALIAS, FALSE);
         wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_ANTIALIASEDLINEENABLE, FALSE);
@@ -2320,8 +2321,7 @@ static void STDMETHODCALLTYPE d3d11_immediate_context_RSSetState(ID3D11DeviceCon
     wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_SLOPESCALEDEPTHBIAS, scale_bias.d);
     wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_DEPTHBIAS, const_bias.d);
     /* GL_DEPTH_CLAMP */
-    if (!desc->DepthClipEnable)
-        FIXME("Ignoring DepthClipEnable %#x.\n", desc->DepthClipEnable);
+    wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_DEPTHCLIP, (desc->DepthClipEnable != FALSE));
     wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_SCISSORTESTENABLE, desc->ScissorEnable);
     wined3d_device_set_render_state(device->wined3d_device, WINED3D_RS_MULTISAMPLEANTIALIAS, desc->MultisampleEnable);
     wined3d_device_set_render_state(device->wined3d_device,
