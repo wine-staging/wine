@@ -6615,6 +6615,18 @@ static DWORD get_max_gl_version(const struct wined3d_gl_info *gl_info, DWORD fla
     return MAKEDWORD_VERSION(4, 4);
 }
 
+static BOOL has_extension(const char *list, const char *ext)
+{
+    size_t len = strlen(ext);
+    while (list)
+    {
+        while (*list == ' ') list++;
+        if (!strncmp(list, ext, len) && (!list[len] || list[len] == ' ')) return TRUE;
+        list = strchr(list, ' ');
+    }
+    return FALSE;
+}
+
 static BOOL wined3d_adapter_init(struct wined3d_adapter *adapter, UINT ordinal, DWORD wined3d_creation_flags)
 {
     static const DWORD supported_gl_versions[] =
@@ -6673,6 +6685,17 @@ static BOOL wined3d_adapter_init(struct wined3d_adapter *adapter, UINT ordinal, 
     }
 
     max_gl_version = get_max_gl_version(gl_info, wined3d_creation_flags);
+
+    if (wined3d_creation_flags & WINED3D_REQUEST_D3D10)
+    {
+        const char *gl_extensions = (const char *)gl_info->gl_ops.gl.p_glGetString(GL_EXTENSIONS);
+        if (!has_extension(gl_extensions, "GL_ARB_compatibility"))
+        {
+            ERR_(winediag)("GL_ARB_compatibility not supported, requesting context with GL version 3.2.\n");
+            max_gl_version = MAKEDWORD_VERSION(3, 2);
+        }
+    }
+
     for (i = 0; i < ARRAY_SIZE(supported_gl_versions); ++i)
     {
         if (supported_gl_versions[i] <= max_gl_version)
