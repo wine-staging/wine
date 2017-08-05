@@ -3166,6 +3166,32 @@ NTSTATUS attach_dlls( CONTEXT *context, void **entry )
 
 
 /***********************************************************************
+ *           elevate_process
+ */
+static void elevate_process( void )
+{
+    NTSTATUS status;
+    HANDLE token;
+
+    if (!(token = __wine_create_default_token( TRUE )))
+    {
+        ERR( "Failed to create admin token\n" );
+        return;
+    }
+
+    SERVER_START_REQ( replace_process_token )
+    {
+        req->token = wine_server_obj_handle( token );
+        if ((status = wine_server_call( req )))
+            ERR( "Failed to replace process token: %08x\n", status );
+    }
+    SERVER_END_REQ;
+
+    NtClose( token );
+}
+
+
+/***********************************************************************
  *           load_global_options
  */
 static void load_global_options(void)
@@ -3226,6 +3252,7 @@ void WINAPI LdrInitializeThunk( void *kernel_start, ULONG_PTR unknown2,
                                 ULONG_PTR unknown3, ULONG_PTR unknown4 )
 {
     static const WCHAR globalflagW[] = {'G','l','o','b','a','l','F','l','a','g',0};
+    ACTIVATION_CONTEXT_RUN_LEVEL_INFORMATION runlevel;
     NTSTATUS status;
     WINE_MODREF *wm;
     PEB *peb = NtCurrentTeb()->Peb;
@@ -3252,6 +3279,16 @@ void WINAPI LdrInitializeThunk( void *kernel_start, ULONG_PTR unknown2,
     LdrQueryImageFileExecutionOptions( &peb->ProcessParameters->ImagePathName, globalflagW,
                                        REG_DWORD, &peb->NtGlobalFlag, sizeof(peb->NtGlobalFlag), NULL );
     heap_set_debug_flags( GetProcessHeap() );
+
+    /* elevate process if necessary */
+    status = RtlQueryInformationActivationContext( 0, NULL, 0, RunlevelInformationInActivationContext,
+                                                   &runlevel, sizeof(runlevel), NULL );
+    if (!status && (runlevel.RunLevel == ACTCTX_RUN_LEVEL_HIGHEST_AVAILABLE ||
+                    runlevel.RunLevel == ACTCTX_RUN_LEVEL_REQUIRE_ADMIN))
+    {
+        TRACE( "Application requested admin rights (run level %d)\n", runlevel.RunLevel );
+        elevate_process();  /* FIXME: the process exists with a wrong token for a short time */
+    }
 
     /* the main exe needs to be the first in the load order list */
     RemoveEntryList( &wm->ldr.InLoadOrderModuleList );
