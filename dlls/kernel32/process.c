@@ -2289,7 +2289,7 @@ static BOOL replace_process( HANDLE handle, const RTL_USER_PROCESS_PARAMETERS *p
  * Create a new process. If hFile is a valid handle we have an exe
  * file, otherwise it is a Winelib app.
  */
-static BOOL create_process( HANDLE hFile, LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES tsa,
+static BOOL create_process( HANDLE token, HANDLE hFile, LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES tsa,
                             BOOL inherit, DWORD flags, const RTL_USER_PROCESS_PARAMETERS *params,
                             LPPROCESS_INFORMATION info, LPCSTR unixdir, const pe_image_info_t *pe_info )
 {
@@ -2356,6 +2356,7 @@ static BOOL create_process( HANDLE hFile, LPSECURITY_ATTRIBUTES psa, LPSECURITY_
         req->access         = PROCESS_ALL_ACCESS;
         req->cpu            = pe_info->cpu;
         req->info_size      = startup_info_size;
+        req->token          = wine_server_obj_handle( token );
         wine_server_add_data( req, objattr, attr_len );
         wine_server_add_data( req, startup_info, startup_info_size );
         wine_server_add_data( req, params->Environment, (env_end - params->Environment) * sizeof(WCHAR) );
@@ -2526,7 +2527,7 @@ static RTL_USER_PROCESS_PARAMETERS *get_vdm_params( const RTL_USER_PROCESS_PARAM
  *
  * Create a new VDM process for a 16-bit or DOS application.
  */
-static BOOL create_vdm_process( LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES tsa,
+static BOOL create_vdm_process( HANDLE token, LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES tsa,
                                 BOOL inherit, DWORD flags, const RTL_USER_PROCESS_PARAMETERS *params,
                                 LPPROCESS_INFORMATION info, LPCSTR unixdir )
 {
@@ -2536,7 +2537,7 @@ static BOOL create_vdm_process( LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES
 
     if (!(new_params = get_vdm_params( params, &pe_info ))) return FALSE;
 
-    ret = create_process( 0, psa, tsa, inherit, flags, new_params, info, unixdir, &pe_info );
+    ret = create_process( token, 0, psa, tsa, inherit, flags, new_params, info, unixdir, &pe_info );
     RtlDestroyProcessParameters( new_params );
     return ret;
 }
@@ -2547,7 +2548,7 @@ static BOOL create_vdm_process( LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES
  *
  * Create a new cmd shell process for a .BAT file.
  */
-static BOOL create_cmd_process( LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES tsa,
+static BOOL create_cmd_process( HANDLE token, LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES tsa,
                                 BOOL inherit, DWORD flags, LPSTARTUPINFOW startup,
                                 const RTL_USER_PROCESS_PARAMETERS *params,
                                 LPPROCESS_INFORMATION info )
@@ -2577,9 +2578,9 @@ static BOOL create_cmd_process( LPSECURITY_ATTRIBUTES psa, LPSECURITY_ATTRIBUTES
     strcatW( newcmdline, params->CommandLine.Buffer );
     strcatW( newcmdline, quotW );
     if (params->CurrentDirectory.DosPath.Length) cur_dir = params->CurrentDirectory.DosPath.Buffer;
-    ret = CreateProcessW( comspec, newcmdline, psa, tsa, inherit,
+    ret = CreateProcessInternalW( token, comspec, newcmdline, psa, tsa, inherit,
                           flags | CREATE_UNICODE_ENVIRONMENT, params->Environment, cur_dir,
-                          startup, info );
+                          startup, info, NULL );
     HeapFree( GetProcessHeap(), 0, newcmdline );
     return ret;
 }
@@ -2692,7 +2693,9 @@ BOOL WINAPI CreateProcessInternalW( HANDLE token, LPCWSTR app_name, LPWSTR cmd_l
 
     TRACE("app %s cmdline %s\n", debugstr_w(app_name), debugstr_w(cmd_line) );
 
-    if (token) FIXME("Creating a process with a token is not yet implemented\n");
+    /* FIXME: Starting a process which requires admin rights should fail
+     * with ERROR_ELEVATION_REQUIRED when no token is passed. */
+
     if (new_token) FIXME("No support for returning created process token\n");
 
     if (!(tidy_cmdline = get_file_name( app_name, cmd_line, name, ARRAY_SIZE( name ), &hFile, &is_64bit )))
@@ -2760,17 +2763,17 @@ BOOL WINAPI CreateProcessInternalW( HANDLE token, LPCWSTR app_name, LPWSTR cmd_l
                debugstr_w(name), is_64bit_arch(pe_info.cpu) ? 64 : 32,
                wine_dbgstr_longlong(pe_info.base), wine_dbgstr_longlong(pe_info.base + pe_info.map_size),
                cpu_names[pe_info.cpu] );
-        retv = create_process( hFile, process_attr, thread_attr,
+        retv = create_process( token, hFile, process_attr, thread_attr,
                                inherit, flags, params, info, unixdir, &pe_info );
         break;
     case BINARY_WIN16:
         TRACE( "starting %s as Win16/DOS binary\n", debugstr_w(name) );
-        retv = create_vdm_process( process_attr, thread_attr, inherit, flags, params, info, unixdir );
+        retv = create_vdm_process( token, process_attr, thread_attr, inherit, flags, params, info, unixdir );
         break;
     case BINARY_UNIX_LIB:
         TRACE( "starting %s as %d-bit Winelib app\n",
                debugstr_w(name), is_64bit_arch(pe_info.cpu) ? 64 : 32 );
-        retv = create_process( hFile, process_attr, thread_attr,
+        retv = create_process( token, hFile, process_attr, thread_attr,
                                inherit, flags, params, info, unixdir, &pe_info );
         break;
     case BINARY_UNKNOWN:
@@ -2780,14 +2783,14 @@ BOOL WINAPI CreateProcessInternalW( HANDLE token, LPCWSTR app_name, LPWSTR cmd_l
             if (!strcmpiW( p, comW ) || !strcmpiW( p, pifW ))
             {
                 TRACE( "starting %s as DOS binary\n", debugstr_w(name) );
-                retv = create_vdm_process( process_attr, thread_attr,
+                retv = create_vdm_process( token, process_attr, thread_attr,
                                            inherit, flags, params, info, unixdir );
                 break;
             }
             if (!strcmpiW( p, batW ) || !strcmpiW( p, cmdW ) )
             {
                 TRACE( "starting %s as batch binary\n", debugstr_w(name) );
-                retv = create_cmd_process( process_attr, thread_attr,
+                retv = create_cmd_process( token, process_attr, thread_attr,
                                            inherit, flags, startup_info, params, info );
                 break;
             }

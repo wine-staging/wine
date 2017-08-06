@@ -744,6 +744,7 @@ struct rawinput_device
     unsigned int access;         /* access rights for process object */
     cpu_type_t   cpu;            /* CPU that the new process will use */
     data_size_t  info_size;      /* size of startup info */
+    obj_handle_t token;          /* token for the new process */
     VARARG(objattr,object_attributes);   /* object attributes */
     VARARG(info,startup_info,info_size); /* startup information */
     VARARG(env,unicode_str);     /* environment for new process */
