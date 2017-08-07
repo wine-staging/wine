@@ -7215,7 +7215,6 @@ static void test_token_security_descriptor(void)
     defaulted = TRUE;
     ret = GetSecurityDescriptorDacl(sd2, &present, &acl2, &defaulted);
     ok(ret, "GetSecurityDescriptorDacl failed with error %u\n", GetLastError());
-    todo_wine
     ok(present, "DACL not present\n");
 
     if (present)
@@ -7336,7 +7335,7 @@ static void test_token_security_descriptor(void)
                 ok(ret, "GetAce failed with error %u\n", GetLastError());
                 ok(ace->Header.AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE,
                    "Unexpected ACE type %#x\n", ace->Header.AceType);
-                todo_wine ok(EqualSid(&ace->SidStart, &medium_level),
+                ok(EqualSid(&ace->SidStart, &medium_level),
                    "Expected medium integrity level\n");
             }
 
@@ -7389,8 +7388,8 @@ static void test_token_security_descriptor(void)
             sacl = NULL;
             ret = GetSecurityDescriptorSacl(sd3, &present, &sacl, &defaulted);
             ok(ret, "GetSecurityDescriptorSacl failed with error %u\n", GetLastError());
-            todo_wine ok(present, "No SACL in the security descriptor\n");
-            todo_wine ok(sacl != NULL, "NULL SACL in the security descriptor\n");
+            ok(present, "No SACL in the security descriptor\n");
+            ok(sacl != NULL, "NULL SACL in the security descriptor\n");
 
             if (sacl)
             {
@@ -7439,8 +7438,8 @@ static void test_token_security_descriptor(void)
             sacl = NULL;
             ret = GetSecurityDescriptorSacl(sd3, &present, &sacl, &defaulted);
             ok(ret, "GetSecurityDescriptorSacl failed with error %u\n", GetLastError());
-            todo_wine ok(present, "No SACL in the security descriptor\n");
-            todo_wine ok(sacl != NULL, "NULL SACL in the security descriptor\n");
+            ok(present, "No SACL in the security descriptor\n");
+            ok(sacl != NULL, "NULL SACL in the security descriptor\n");
 
             if (sacl)
             {
@@ -7504,8 +7503,8 @@ static void test_token_security_descriptor(void)
 
         ret = GetSecurityDescriptorSacl(sd3, &present, &sacl, &defaulted);
         ok(ret, "GetSecurityDescriptorSacl failed with error %u\n", GetLastError());
-        todo_wine ok(present, "No SACL in the security descriptor\n");
-        todo_wine ok(sacl != NULL, "NULL SACL in the security descriptor\n");
+        ok(present, "No SACL in the security descriptor\n");
+        ok(sacl != NULL, "NULL SACL in the security descriptor\n");
 
         if (sacl)
         {
@@ -7542,8 +7541,8 @@ static void test_token_security_descriptor(void)
         sacl = NULL;
         ret = GetSecurityDescriptorSacl(sd3, &present, &sacl, &defaulted);
         ok(ret, "GetSecurityDescriptorSacl failed with error %u\n", GetLastError());
-        todo_wine ok(present, "No SACL in the security descriptor\n");
-        todo_wine ok(sacl != NULL, "NULL SACL in the security descriptor\n");
+        ok(present, "No SACL in the security descriptor\n");
+        ok(sacl != NULL, "NULL SACL in the security descriptor\n");
 
         if (sacl)
         {
@@ -7761,7 +7760,7 @@ static void test_child_token_sd_medium(void)
     ok(ret, "GetAce failed with error %u\n", GetLastError());
     ok(ace_label->Header.AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE,
        "Unexpected ACE type %#x\n", ace_label->Header.AceType);
-    todo_wine ok(EqualSid(&ace_label->SidStart, &medium_level),
+    ok(EqualSid(&ace_label->SidStart, &medium_level),
        "Expected medium integrity level\n");
 
     memset(buffer_integrity, 0, sizeof(buffer_integrity));
