@@ -4696,10 +4696,13 @@ static void get_viewport(struct wined3d_context *context, const struct wined3d_s
 
     if (target)
     {
-        if (viewport->width > target->width)
-            viewport->width = target->width;
-        if (viewport->height > target->height)
-            viewport->height = target->height;
+        if (context->d3d_info->wined3d_creation_flags & WINED3D_LIMIT_VIEWPORT)
+        {
+            if (viewport->width > target->width)
+                viewport->width = target->width;
+            if (viewport->height > target->height)
+                viewport->height = target->height;
+        }
     }
 
     /*
