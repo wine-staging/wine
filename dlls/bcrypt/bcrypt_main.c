@@ -220,7 +220,9 @@ enum alg_id
     ALG_ID_SHA1,
     ALG_ID_SHA256,
     ALG_ID_SHA384,
-    ALG_ID_SHA512
+    ALG_ID_SHA512,
+    ALG_ID_ECDSA_P256,
+    ALG_ID_ECDSA_P384,
 };
 
 enum mode_id
@@ -248,7 +250,9 @@ static const struct {
     /* ALG_ID_SHA1   */ {  278,   20,  512, BCRYPT_SHA1_ALGORITHM,   FALSE },
     /* ALG_ID_SHA256 */ {  286,   32,  512, BCRYPT_SHA256_ALGORITHM, FALSE },
     /* ALG_ID_SHA384 */ {  382,   48, 1024, BCRYPT_SHA384_ALGORITHM, FALSE },
-    /* ALG_ID_SHA512 */ {  382,   64, 1024, BCRYPT_SHA512_ALGORITHM, FALSE }
+    /* ALG_ID_SHA512 */ {  382,   64, 1024, BCRYPT_SHA512_ALGORITHM, FALSE },
+    /* ALG_ID_ECDSA_P256 */ { 0,   0,     0, BCRYPT_ECDSA_P256_ALGORITHM, FALSE  },
+    /* ALG_ID_ECDSA_P384 */ { 0,   0,     0, BCRYPT_ECDSA_P384_ALGORITHM, FALSE  },
 };
 
 struct algorithm
@@ -327,6 +331,8 @@ NTSTATUS WINAPI BCryptOpenAlgorithmProvider( BCRYPT_ALG_HANDLE *handle, LPCWSTR 
     else if (!strcmpW( id, BCRYPT_SHA256_ALGORITHM )) alg_id = ALG_ID_SHA256;
     else if (!strcmpW( id, BCRYPT_SHA384_ALGORITHM )) alg_id = ALG_ID_SHA384;
     else if (!strcmpW( id, BCRYPT_SHA512_ALGORITHM )) alg_id = ALG_ID_SHA512;
+    else if (!strcmpW( id, BCRYPT_ECDSA_P256_ALGORITHM )) alg_id = ALG_ID_ECDSA_P256;
+    else if (!strcmpW( id, BCRYPT_ECDSA_P384_ALGORITHM )) alg_id = ALG_ID_ECDSA_P384;
     else
     {
         FIXME( "algorithm %s not supported\n", debugstr_w(id) );
@@ -895,6 +901,12 @@ struct key_symmetric
     ULONG              secret_len;
 };
 
+struct key_asymmetric
+{
+    UCHAR             *pubkey;
+    ULONG              pubkey_len;
+};
+
 struct key
 {
     struct object      hdr;
@@ -902,6 +914,7 @@ struct key
     union
     {
         struct key_symmetric s;
+        struct key_asymmetric a;
     } u;
 };
 
@@ -916,6 +929,12 @@ struct key_symmetric
     ULONG          secret_len;
 };
 
+struct key_asymmetric
+{
+    UCHAR             *pubkey;
+    ULONG              pubkey_len;
+};
+
 struct key
 {
     struct object  hdr;
@@ -923,6 +942,7 @@ struct key
     union
     {
         struct key_symmetric s;
+        struct key_asymmetric a;
     } u;
 };
 #else
@@ -998,6 +1018,12 @@ static inline BOOL key_is_symmetric( struct key *key )
     return FALSE;
 }
 
+static inline BOOL key_is_asymmetric( struct key *key )
+{
+    ERR( "support for keys not available at build time\n" );
+    return FALSE;
+}
+
 static NTSTATUS key_symmetric_get_mode( struct key *key, enum mode_id *mode )
 {
     *mode = key->u.s.mode;
@@ -1041,6 +1067,33 @@ static NTSTATUS key_symmetric_init( struct key *key, struct algorithm *alg, cons
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS key_asymmetric_init( struct key *key, struct algorithm *alg, const UCHAR *pubkey, ULONG pubkey_len )
+{
+    UCHAR *buffer;
+
+    if (!libgnutls_handle) return STATUS_INTERNAL_ERROR;
+
+    switch (alg->id)
+    {
+    case ALG_ID_ECDSA_P256:
+    case ALG_ID_ECDSA_P384:
+        break;
+
+    default:
+        FIXME( "algorithm %u not supported\n", alg->id );
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    if (!(buffer = heap_alloc( pubkey_len ))) return STATUS_NO_MEMORY;
+    memcpy( buffer, pubkey, pubkey_len );
+
+    key->alg_id         = alg->id;
+    key->u.a.pubkey     = buffer;
+    key->u.a.pubkey_len = pubkey_len;
+
+    return STATUS_SUCCESS;
+}
+
 static NTSTATUS key_duplicate( struct key *key_orig, struct key *key_copy )
 {
     UCHAR *buffer;
@@ -1061,7 +1114,13 @@ static NTSTATUS key_duplicate( struct key *key_orig, struct key *key_copy )
     }
     else
     {
-        return STATUS_NOT_IMPLEMENTED;
+        if (!(buffer = HeapAlloc( GetProcessHeap(), 0, key_orig->u.a.pubkey_len ))) return STATUS_NO_MEMORY;
+        memcpy( buffer, key_orig->u.a.pubkey, key_orig->u.a.pubkey_len );
+
+        key_copy->u.a.pubkey      = buffer;
+        key_copy->u.a.pubkey_len  = key_orig->u.a.pubkey_len;
+
+        return STATUS_SUCCESS;
     }
 
     return STATUS_SUCCESS;
@@ -1218,8 +1277,13 @@ static NTSTATUS key_get_tag( struct key *key, UCHAR *tag, ULONG len )
 
 static NTSTATUS key_destroy( struct key *key )
 {
-    if (key->u.s.handle) pgnutls_cipher_deinit( key->u.s.handle );
-    heap_free( key->u.s.secret );
+    if(key_is_symmetric(key))
+    {
+        if (key->u.s.handle) pgnutls_cipher_deinit( key->u.s.handle );
+        heap_free( key->u.s.secret );
+    }
+    else
+        heap_free( key->u.a.pubkey );
     heap_free( key );
     return STATUS_SUCCESS;
 }
@@ -1258,6 +1322,12 @@ static NTSTATUS key_symmetric_init( struct key *key, struct algorithm *alg, cons
     key->u.s.secret_len  = secret_len;
 
     return STATUS_SUCCESS;
+}
+
+static NTSTATUS key_asymmetric_init( struct key *key, struct algorithm *alg, const UCHAR *pubkey, ULONG pubkey_len )
+{
+    FIXME( "not implemented on Mac\n" );
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 static NTSTATUS key_duplicate( struct key *key_orig, struct key *key_copy )
@@ -1371,6 +1441,12 @@ static NTSTATUS key_symmetric_init( struct key *key, struct algorithm *alg, cons
 {
     ERR( "support for keys not available at build time\n" );
     key->u.s.mode = MODE_ID_CBC;
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+static NTSTATUS key_asymmetric_init( struct key *key, struct algorithm *alg, const UCHAR *pubkey, ULONG pubkey_len )
+{
+    ERR( "support for keys not available at build time\n" );
     return STATUS_NOT_IMPLEMENTED;
 }
 
@@ -1554,6 +1630,88 @@ NTSTATUS WINAPI BCryptDuplicateKey( BCRYPT_KEY_HANDLE handle, BCRYPT_KEY_HANDLE 
 
     *handle_copy = key_copy;
     return STATUS_SUCCESS;
+}
+
+NTSTATUS WINAPI BCryptImportKeyPair( BCRYPT_ALG_HANDLE algorithm, BCRYPT_KEY_HANDLE decrypt_key, const WCHAR *type,
+                                     BCRYPT_KEY_HANDLE *ret_key, UCHAR *input, ULONG input_len, ULONG flags )
+{
+    struct algorithm *alg = algorithm;
+    NTSTATUS status;
+    struct key *key;
+
+    TRACE( "%p, %p, %s, %p, %p, %u, %u\n", algorithm, decrypt_key, debugstr_w(type), ret_key, input, input_len, flags );
+
+    if (!alg || alg->hdr.magic != MAGIC_ALG) return STATUS_INVALID_HANDLE;
+    if (!ret_key || !type || !input) return STATUS_INVALID_PARAMETER;
+
+    *ret_key = NULL;
+
+    if (decrypt_key)
+    {
+        FIXME( "decrypting of key not yet supported\n" );
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
+    if (!strcmpW( type, BCRYPT_ECCPUBLIC_BLOB ))
+    {
+        BCRYPT_ECCKEY_BLOB *ecc_blob = (BCRYPT_ECCKEY_BLOB *)input;
+        DWORD key_size, magic;
+
+        if (input_len < sizeof(*ecc_blob))
+            return STATUS_INVALID_PARAMETER;
+
+        switch (alg->id)
+        {
+            case ALG_ID_ECDSA_P256:
+                key_size = 32;
+                magic = BCRYPT_ECDSA_PUBLIC_P256_MAGIC;
+                break;
+            case ALG_ID_ECDSA_P384:
+                key_size = 48;
+                magic = BCRYPT_ECDSA_PUBLIC_P384_MAGIC;
+                break;
+
+            default:
+                FIXME("Algorithm %d does not yet support importing blob of type: %s\n", alg->id, debugstr_w(type));
+                return STATUS_NOT_SUPPORTED;
+        }
+
+        if (ecc_blob->dwMagic != magic)
+            return STATUS_NOT_SUPPORTED;
+
+        if (ecc_blob->cbKey != key_size)
+            return STATUS_INVALID_PARAMETER;
+
+        if (!(key = HeapAlloc( GetProcessHeap(), 0, sizeof(*key) )))
+            return STATUS_NO_MEMORY;
+
+        key->hdr.magic = MAGIC_KEY;
+        if ((status = key_asymmetric_init( key, alg, (BYTE *)(ecc_blob + 1), ecc_blob->cbKey * 2 )))
+        {
+            HeapFree( GetProcessHeap(), 0, key );
+            return status;
+        }
+
+        *ret_key = key;
+        return STATUS_SUCCESS;
+    }
+
+    FIXME( "unsupported key type %s\n", debugstr_w(type) );
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS WINAPI BCryptVerifySignature( BCRYPT_KEY_HANDLE handle, void *padding, UCHAR *hash, ULONG hash_len,
+                                       UCHAR *signature, ULONG signature_len, ULONG flags )
+{
+    struct key *key = handle;
+
+    FIXME( "%p, %p, %p, %u, %p, %u, %08x: stub!\n", handle, padding, hash,
+           hash_len, signature, signature_len, flags );
+
+    if (!key || key->hdr.magic != MAGIC_KEY) return STATUS_INVALID_HANDLE;
+    if (!key_is_asymmetric(key)) return STATUS_NOT_SUPPORTED;
+
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 NTSTATUS WINAPI BCryptDestroyKey( BCRYPT_KEY_HANDLE handle )
