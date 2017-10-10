@@ -77,6 +77,9 @@ static int (*pgnutls_pubkey_verify_hash2)(gnutls_pubkey_t key, gnutls_sign_algor
                                           unsigned int flags, const gnutls_datum_t *hash,
                                           const gnutls_datum_t *signature);
 
+/* Not present in gnutls version < 2.11.0 */
+static int (*pgnutls_pubkey_import_rsa_raw)(gnutls_pubkey_t key, const gnutls_datum_t *m, const gnutls_datum_t *e);
+
 static void *libgnutls_handle;
 #define MAKE_FUNCPTR(f) static typeof(f) * p##f
 MAKE_FUNCPTR(gnutls_cipher_decrypt2);
@@ -116,6 +119,11 @@ static gnutls_sign_algorithm_t compat_gnutls_pk_to_sign(gnutls_pk_algorithm_t pk
 static int compat_gnutls_pubkey_verify_hash2(gnutls_pubkey_t key, gnutls_sign_algorithm_t algo,
                                              unsigned int flags, const gnutls_datum_t *hash,
                                              const gnutls_datum_t *signature)
+{
+    return GNUTLS_E_UNKNOWN_CIPHER_TYPE;
+}
+
+static int compat_gnutls_pubkey_import_rsa_raw(gnutls_pubkey_t key, const gnutls_datum_t *m, const gnutls_datum_t *e)
 {
     return GNUTLS_E_UNKNOWN_CIPHER_TYPE;
 }
@@ -185,6 +193,11 @@ static BOOL gnutls_initialize(void)
     {
         WARN("gnutls_pubkey_verify_hash2 not found\n");
         pgnutls_pubkey_verify_hash2 = compat_gnutls_pubkey_verify_hash2;
+    }
+    if (!(pgnutls_pubkey_import_rsa_raw = wine_dlsym( libgnutls_handle, "gnutls_pubkey_import_rsa_raw", NULL, 0 )))
+    {
+        WARN("gnutls_pubkey_import_rsa_raw not found\n");
+        pgnutls_pubkey_import_rsa_raw = compat_gnutls_pubkey_import_rsa_raw;
     }
 
     if (TRACE_ON( bcrypt ))
@@ -271,6 +284,7 @@ enum alg_id
     ALG_ID_MD4,
     ALG_ID_MD5,
     ALG_ID_RNG,
+    ALG_ID_RSA,
     ALG_ID_SHA1,
     ALG_ID_SHA256,
     ALG_ID_SHA384,
@@ -301,6 +315,7 @@ static const struct {
     /* ALG_ID_MD4    */ {  270,   16,  512, BCRYPT_MD4_ALGORITHM,    FALSE },
     /* ALG_ID_MD5    */ {  274,   16,  512, BCRYPT_MD5_ALGORITHM,    FALSE },
     /* ALG_ID_RNG    */ {    0,    0,    0, BCRYPT_RNG_ALGORITHM,    FALSE },
+    /* ALG_ID_RSA    */ {    0,    0,    0, BCRYPT_RSA_ALGORITHM,    FALSE },
     /* ALG_ID_SHA1   */ {  278,   20,  512, BCRYPT_SHA1_ALGORITHM,   FALSE },
     /* ALG_ID_SHA256 */ {  286,   32,  512, BCRYPT_SHA256_ALGORITHM, FALSE },
     /* ALG_ID_SHA384 */ {  382,   48, 1024, BCRYPT_SHA384_ALGORITHM, FALSE },
@@ -381,6 +396,7 @@ NTSTATUS WINAPI BCryptOpenAlgorithmProvider( BCRYPT_ALG_HANDLE *handle, LPCWSTR 
     else if (!strcmpW( id, BCRYPT_MD4_ALGORITHM )) alg_id = ALG_ID_MD4;
     else if (!strcmpW( id, BCRYPT_MD5_ALGORITHM )) alg_id = ALG_ID_MD5;
     else if (!strcmpW( id, BCRYPT_RNG_ALGORITHM )) alg_id = ALG_ID_RNG;
+    else if (!strcmpW( id, BCRYPT_RSA_ALGORITHM )) alg_id = ALG_ID_RSA;
     else if (!strcmpW( id, BCRYPT_SHA1_ALGORITHM )) alg_id = ALG_ID_SHA1;
     else if (!strcmpW( id, BCRYPT_SHA256_ALGORITHM )) alg_id = ALG_ID_SHA256;
     else if (!strcmpW( id, BCRYPT_SHA384_ALGORITHM )) alg_id = ALG_ID_SHA384;
@@ -1131,6 +1147,7 @@ static NTSTATUS key_asymmetric_init( struct key *key, struct algorithm *alg, con
     {
     case ALG_ID_ECDSA_P256:
     case ALG_ID_ECDSA_P384:
+    case ALG_ID_RSA:
         break;
 
     default:
@@ -1475,6 +1492,34 @@ static NTSTATUS import_gnutls_pubkey_ecc( struct key *key, gnutls_pubkey_t *gnut
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS import_gnutls_pubkey_rsa( struct key *key, gnutls_pubkey_t *gnutls_key )
+{
+    BCRYPT_RSAKEY_BLOB *rsa_blob;
+    gnutls_datum_t m, e;
+    int ret;
+
+    if ((ret = pgnutls_pubkey_init( gnutls_key )))
+    {
+        pgnutls_perror( ret );
+        return STATUS_INTERNAL_ERROR;
+    }
+
+    rsa_blob = (BCRYPT_RSAKEY_BLOB *)key->u.a.pubkey;
+    e.data = key->u.a.pubkey + sizeof(*rsa_blob);
+    e.size = rsa_blob->cbPublicExp;
+    m.data = key->u.a.pubkey + sizeof(*rsa_blob) + rsa_blob->cbPublicExp;
+    m.size = rsa_blob->cbModulus;
+
+    if ((ret = pgnutls_pubkey_import_rsa_raw( *gnutls_key, &m, &e )))
+    {
+        pgnutls_perror( ret );
+        pgnutls_pubkey_deinit( *gnutls_key );
+        return STATUS_INTERNAL_ERROR;
+    }
+
+    return STATUS_SUCCESS;
+}
+
 static NTSTATUS import_gnutls_pubkey( struct key *key,  gnutls_pubkey_t *gnutls_key)
 {
     switch (key->alg_id)
@@ -1482,6 +1527,8 @@ static NTSTATUS import_gnutls_pubkey( struct key *key,  gnutls_pubkey_t *gnutls_
         case ALG_ID_ECDSA_P256:
         case ALG_ID_ECDSA_P384:
             return import_gnutls_pubkey_ecc( key, gnutls_key );
+        case ALG_ID_RSA:
+            return import_gnutls_pubkey_rsa( key, gnutls_key );
 
         default:
             FIXME("Algorithm %d not yet supported\n", key->alg_id);
@@ -1511,6 +1558,14 @@ static NTSTATUS prepare_gnutls_signature_ecc( struct key *key, UCHAR *signature,
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS prepare_gnutls_signature_rsa( struct key *key, UCHAR *signature, ULONG signature_len,
+                                              gnutls_datum_t *gnutls_signature )
+{
+    gnutls_signature->data = signature;
+    gnutls_signature->size = signature_len;
+    return STATUS_SUCCESS;
+}
+
 static NTSTATUS prepare_gnutls_signature( struct key *key, UCHAR *signature, ULONG signature_len,
                                           gnutls_datum_t *gnutls_signature )
 {
@@ -1519,6 +1574,8 @@ static NTSTATUS prepare_gnutls_signature( struct key *key, UCHAR *signature, ULO
         case ALG_ID_ECDSA_P256:
         case ALG_ID_ECDSA_P384:
             return prepare_gnutls_signature_ecc( key, signature, signature_len, gnutls_signature );
+        case ALG_ID_RSA:
+            return prepare_gnutls_signature_rsa( key, signature, signature_len, gnutls_signature );
 
         default:
             FIXME( "Algorithm %d not yet supported\n", key->alg_id );
@@ -1537,18 +1594,38 @@ static NTSTATUS key_asymmetric_verify( struct key *key, void *padding, UCHAR *ha
     NTSTATUS status;
     int ret;
 
-    if (flags)
-        FIXME( "Flags %08x not supported\n", flags );
-
-    /* only the hash size must match, not the actual hash function */
-    switch (hash_len)
+    if (key->alg_id == ALG_ID_RSA)
     {
-        case 32: hash_algo = GNUTLS_DIG_SHA256; break;
-        case 48: hash_algo = GNUTLS_DIG_SHA384; break;
+        BCRYPT_PKCS1_PADDING_INFO *pinfo = (BCRYPT_PKCS1_PADDING_INFO *)padding;
 
-        default:
-            FIXME( "Hash size %u not yet supported\n", hash_len );
-            return STATUS_INVALID_SIGNATURE;
+        if (!(flags & BCRYPT_PAD_PKCS1) || !pinfo) return STATUS_INVALID_PARAMETER;
+        if (!pinfo->pszAlgId) return STATUS_INVALID_SIGNATURE;
+
+        if (!strcmpW( pinfo->pszAlgId, BCRYPT_SHA1_ALGORITHM )) hash_algo = GNUTLS_DIG_SHA1;
+        else if (!strcmpW( pinfo->pszAlgId, BCRYPT_SHA256_ALGORITHM )) hash_algo = GNUTLS_DIG_SHA256;
+        else if (!strcmpW( pinfo->pszAlgId, BCRYPT_SHA384_ALGORITHM )) hash_algo = GNUTLS_DIG_SHA384;
+        else if (!strcmpW( pinfo->pszAlgId, BCRYPT_SHA512_ALGORITHM )) hash_algo = GNUTLS_DIG_SHA512;
+        else
+        {
+            FIXME( "Hash algorithm %s not supported\n", debugstr_w(pinfo->pszAlgId) );
+            return STATUS_NOT_SUPPORTED;
+        }
+    }
+    else
+    {
+        if (flags)
+            FIXME( "Flags %08x not supported\n", flags );
+
+        /* only the hash size must match, not the actual hash function */
+        switch (hash_len)
+        {
+            case 32: hash_algo = GNUTLS_DIG_SHA256; break;
+            case 48: hash_algo = GNUTLS_DIG_SHA384; break;
+
+            default:
+                FIXME( "Hash size %u not yet supported\n", hash_len );
+                return STATUS_INVALID_SIGNATURE;
+        }
     }
 
     switch (key->alg_id)
@@ -1556,6 +1633,9 @@ static NTSTATUS key_asymmetric_verify( struct key *key, void *padding, UCHAR *ha
         case ALG_ID_ECDSA_P256:
         case ALG_ID_ECDSA_P384:
             pk_algo = GNUTLS_PK_ECC;
+            break;
+        case ALG_ID_RSA:
+            pk_algo = GNUTLS_PK_RSA;
             break;
 
         default:
@@ -1582,7 +1662,8 @@ static NTSTATUS key_asymmetric_verify( struct key *key, void *padding, UCHAR *ha
     gnutls_hash.size = hash_len;
     ret = pgnutls_pubkey_verify_hash2( gnutls_key, sign_algo, 0, &gnutls_hash, &gnutls_signature );
 
-    HeapFree( GetProcessHeap(), 0, gnutls_signature.data );
+    if (gnutls_signature.data != signature)
+        HeapFree( GetProcessHeap(), 0, gnutls_signature.data );
     pgnutls_pubkey_deinit( gnutls_key );
     return (ret < 0) ? STATUS_INVALID_SIGNATURE : STATUS_SUCCESS;
 }
@@ -2013,6 +2094,33 @@ NTSTATUS WINAPI BCryptImportKeyPair( BCRYPT_ALG_HANDLE algorithm, BCRYPT_KEY_HAN
 
         key->hdr.magic = MAGIC_KEY;
         if ((status = key_asymmetric_init( key, alg, (BYTE *)(ecc_blob + 1), ecc_blob->cbKey * 2 )))
+        {
+            HeapFree( GetProcessHeap(), 0, key );
+            return status;
+        }
+
+        *ret_key = key;
+        return STATUS_SUCCESS;
+    }
+    else if (!strcmpW( type, BCRYPT_RSAPUBLIC_BLOB ))
+    {
+        BCRYPT_RSAKEY_BLOB *rsa_blob = (BCRYPT_RSAKEY_BLOB *)input;
+
+        if (input_len < sizeof(*rsa_blob))
+            return STATUS_INVALID_PARAMETER;
+
+        if (alg->id != ALG_ID_RSA)
+            return STATUS_NOT_SUPPORTED;
+
+        if (rsa_blob->Magic != BCRYPT_RSAPUBLIC_MAGIC)
+            return STATUS_NOT_SUPPORTED;
+
+        if (!(key = HeapAlloc( GetProcessHeap(), 0, sizeof(*key) )))
+            return STATUS_NO_MEMORY;
+
+        key->hdr.magic = MAGIC_KEY;
+        if ((status = key_asymmetric_init( key, alg, (BYTE *)rsa_blob,
+                sizeof(*rsa_blob) + rsa_blob->cbPublicExp + rsa_blob->cbModulus )))
         {
             HeapFree( GetProcessHeap(), 0, key );
             return status;
