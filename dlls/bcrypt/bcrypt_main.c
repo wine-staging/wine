@@ -1316,6 +1316,169 @@ NTSTATUS WINAPI BCryptSetProperty( BCRYPT_HANDLE handle, const WCHAR *prop, UCHA
     }
 }
 
+NTSTATUS PBKDF2_F( BCRYPT_ALG_HANDLE algorithm,
+                   UCHAR *password, ULONG password_length,
+                   UCHAR *salt, ULONG salt_length,
+                   ULONGLONG iterations, int i,
+                   UCHAR *res, int hash_length )
+{
+    BCRYPT_HASH_HANDLE handle;
+    NTSTATUS status = STATUS_NOT_SUPPORTED;
+    UCHAR bytes[4];
+    UCHAR *tmp;
+    int j;
+    int k;
+
+    if (!(tmp = heap_alloc( hash_length )))
+    {
+        return STATUS_NO_MEMORY;
+    }
+
+    for (j = 0; j < iterations; j++)
+    {
+        status = BCryptCreateHash( algorithm, &handle, NULL, 0,
+                                   password, password_length, 0 );
+        if (status != STATUS_SUCCESS)
+            goto done;
+
+        if (j == 0)
+        {
+            /* Use salt || INT(i) */
+            status = BCryptHashData( handle, salt, salt_length, 0 );
+            if (status != STATUS_SUCCESS)
+                goto done;
+            bytes[0] = (i >> 24) & 0xFF;
+            bytes[1] = (i >> 16) & 0xFF;
+            bytes[2] = (i >> 8) & 0xFF;
+            bytes[3] = i & 0xFF;
+            status = BCryptHashData( handle, bytes, 4, 0 );
+        }
+        else
+        {
+            /* Use U_j */
+            status = BCryptHashData( handle, tmp, hash_length, 0 );
+        }
+        if (status != STATUS_SUCCESS)
+            goto done;
+
+        status = BCryptFinishHash( handle, tmp, hash_length, 0 );
+        if (status != STATUS_SUCCESS)
+            goto done;
+
+        status = BCryptDestroyHash( handle );
+        if (status != STATUS_SUCCESS)
+            goto done;
+
+        handle = NULL;
+
+        if (j == 0)
+        {
+            /* Copy into res */
+            memcpy( res, tmp, hash_length );
+        }
+        else
+        {
+            /* XOR into res */
+            for (k = 0; k < hash_length; k++)
+                res[k] ^= tmp[k];
+        }
+    }
+
+done:
+    TRACE("<- status 0x%08x\n", status);
+    if(handle)
+        BCryptDestroyHash( handle );
+    heap_free( tmp );
+    return status;
+}
+
+/************************************************************
+ *            BCryptDeriveKeyPBKDF2   (BCRYPT.@)
+ *
+ * Derive a key from a password using the PBKDF2 function
+ * (RFC 2898).
+ *
+ * PARAMS
+ *   handle          [I] Pointer to the PRF provider
+ *   password        [I] Optional pointer to the beginning of the password
+ *   password_length [I] Length of the password
+ *   salt            [I] Optional pointer to the beginning of the salt
+ *   salt_length     [I] Length of the salt
+ *   iterations      [I] Iteration count
+ *   dk              [O] Pointer to the beginning of the buffer to store the
+ *                       derived key in, at least dklen in size
+ *   dklen           [I] Intended length of the derived key, at most
+ *                       (2^32 - 1) * (output length of PRF)
+ *   flags           [I] Reserved, must be zero
+ *
+ * RETURNS
+ *   Success: STATUS_SUCCESS.
+ *   Failure: - STATUS_INVALID_HANDLE
+ *            - STATUS_INVALID_PARAMETER
+ *            - STATUS_NO_MEMORY
+ */
+NTSTATUS WINAPI BCryptDeriveKeyPBKDF2( BCRYPT_ALG_HANDLE handle,
+                                       PUCHAR password, ULONG password_length,
+                                       PUCHAR salt, ULONG salt_length,
+                                       ULONGLONG iterations,
+                                       PUCHAR dk, ULONG dklen,
+                                       ULONG flags )
+{
+    struct algorithm *alg = handle;
+    int hlen = alg_props[alg->id].hash_length;
+    UCHAR *partial;
+    NTSTATUS status;
+    int l;
+    int r;
+    int i;
+
+    TRACE( "%p, %p, %u, %p, %u, %s, %p, %u, %08x - stub\n",
+           handle, password, password_length, salt, salt_length,
+           wine_dbgstr_longlong(iterations), dk, dklen, flags );
+
+    if (dklen <= 0 || dklen > ((((ULONGLONG) 1) << 32) - 1) * hlen)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    l = 1 + ((dklen - 1) / hlen); /* ceil(dklen/hlen) */
+    r = dklen - (l - 1) * hlen;
+
+    /* Full blocks */
+    for (i = 1; i < l; i++)
+    {
+        status = PBKDF2_F( handle,
+                           password, password_length,
+                           salt, salt_length,
+                           iterations, i,
+                           dk + ((i - 1) * hlen), hlen );
+        if (status != STATUS_SUCCESS)
+        {
+            return status;
+        }
+    }
+
+    /* Final partial block */
+    if (!(partial = heap_alloc( hlen )))
+    {
+        return STATUS_NO_MEMORY;
+    }
+    status = PBKDF2_F( handle,
+                       password, password_length,
+                       salt, salt_length,
+                       iterations, l,
+                       partial, hlen );
+    if (status != STATUS_SUCCESS)
+    {
+        heap_free( partial );
+        return status;
+    }
+    memcpy( dk + ((l - 1) * hlen), partial, r );
+    heap_free( partial );
+
+    return STATUS_SUCCESS;
+}
+
 BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, LPVOID reserved )
 {
     switch (reason)
