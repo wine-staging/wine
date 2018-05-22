@@ -878,6 +878,12 @@ static HRESULT layout_resolve_fonts(struct dwrite_textlayout *layout)
                 goto fatal;
             }
 
+            if (!font) {
+                hr = E_FAIL;
+                WARN("Failed to create font face, hr %#x.\n", hr);
+                goto fatal;
+            }
+
             hr = IDWriteFont_CreateFontFace(font, &run->run.fontFace);
             IDWriteFont_Release(font);
             if (FAILED(hr)) {

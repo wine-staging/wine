@@ -3353,35 +3353,23 @@ todo_wine
 
     count = 0;
     hr = IDWriteTextLayout_GetClusterMetrics(layout, clusters, 4, &count);
-todo_wine
     ok(hr == S_OK, "got 0x%08x\n", hr);
-todo_wine
     ok(count == 4, "got %u\n", count);
     for (i = 0, width = 0.0; i < count; i++)
         width += clusters[i].width;
 
     memset(&metrics, 0xcc, sizeof(metrics));
     hr = IDWriteTextLayout_GetMetrics(layout, &metrics);
-todo_wine
     ok(hr == S_OK, "got 0x%08x\n", hr);
-todo_wine
     ok(metrics.left == 0.0, "got %.2f\n", metrics.left);
-todo_wine
     ok(metrics.top == 0.0, "got %.2f\n", metrics.top);
-todo_wine
     ok(metrics.width == width, "got %.2f, expected %.2f\n", metrics.width, width);
-todo_wine
     ok(metrics.widthIncludingTrailingWhitespace == width, "got %.2f, expected %.2f\n",
         metrics.widthIncludingTrailingWhitespace, width);
-todo_wine
     ok(metrics.height > 0.0, "got %.2f\n", metrics.height);
-todo_wine
     ok(metrics.layoutWidth == 500.0, "got %.2f\n", metrics.layoutWidth);
-todo_wine
     ok(metrics.layoutHeight == 1000.0, "got %.2f\n", metrics.layoutHeight);
-todo_wine
     ok(metrics.maxBidiReorderingDepth == 1, "got %u\n", metrics.maxBidiReorderingDepth);
-todo_wine
     ok(metrics.lineCount == 1, "got %u\n", metrics.lineCount);
 
     IDWriteTextLayout_Release(layout);
@@ -4680,16 +4668,13 @@ static void test_MapCharacters(void)
     font = NULL;
     hr = IDWriteFontFallback_MapCharacters(fallback, &analysissource, 0, 1, NULL, NULL, DWRITE_FONT_WEIGHT_NORMAL,
         DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, &mappedlength, &font, &scale);
-todo_wine {
     ok(hr == S_OK, "got 0x%08x\n", hr);
     ok(mappedlength == 1, "got %u\n", mappedlength);
-}
     ok(scale == 1.0f, "got %f\n", scale);
-todo_wine
     ok(font != NULL, "got %p\n", font);
-if (font) {
-    IDWriteFont_Release(font);
-}
+    if (font) {
+        IDWriteFont_Release(font);
+    }
     /* same latin text, full length */
     g_source = strW;
     mappedlength = 0;
@@ -4697,16 +4682,13 @@ if (font) {
     font = NULL;
     hr = IDWriteFontFallback_MapCharacters(fallback, &analysissource, 0, 3, NULL, NULL, DWRITE_FONT_WEIGHT_NORMAL,
         DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, &mappedlength, &font, &scale);
-todo_wine {
     ok(hr == S_OK, "got 0x%08x\n", hr);
     ok(mappedlength == 3, "got %u\n", mappedlength);
-}
     ok(scale == 1.0f, "got %f\n", scale);
-todo_wine
     ok(font != NULL, "got %p\n", font);
-if (font) {
-    IDWriteFont_Release(font);
-}
+    if (font) {
+        IDWriteFont_Release(font);
+    }
     /* string 'a\x3058b' */
     g_source = str2W;
     mappedlength = 0;
@@ -4714,38 +4696,32 @@ if (font) {
     font = NULL;
     hr = IDWriteFontFallback_MapCharacters(fallback, &analysissource, 0, 3, NULL, NULL, DWRITE_FONT_WEIGHT_NORMAL,
         DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, &mappedlength, &font, &scale);
-todo_wine {
     ok(hr == S_OK, "got 0x%08x\n", hr);
     ok(mappedlength == 1, "got %u\n", mappedlength);
-}
     ok(scale == 1.0f, "got %f\n", scale);
-todo_wine
     ok(font != NULL, "got %p\n", font);
-if (font) {
-    IDWriteFont_Release(font);
-}
+    if (font) {
+        IDWriteFont_Release(font);
+    }
     g_source = str2W;
     mappedlength = 0;
     scale = 0.0f;
     font = NULL;
     hr = IDWriteFontFallback_MapCharacters(fallback, &analysissource, 1, 2, NULL, NULL, DWRITE_FONT_WEIGHT_NORMAL,
         DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, &mappedlength, &font, &scale);
-todo_wine {
     ok(hr == S_OK, "got 0x%08x\n", hr);
     ok(mappedlength == 1, "got %u\n", mappedlength);
-}
     ok(scale == 1.0f, "got %f\n", scale);
-todo_wine
     ok(font != NULL, "got %p\n", font);
-if (font) {
-    /* font returned for Hiragana character, check if it supports Latin too */
-    exists = FALSE;
-    hr = IDWriteFont_HasCharacter(font, 'b', &exists);
-    ok(hr == S_OK, "got 0x%08x\n", hr);
-    ok(exists, "got %d\n", exists);
+    if (font) {
+        /* font returned for Hiragana character, check if it supports Latin too */
+        exists = FALSE;
+        hr = IDWriteFont_HasCharacter(font, 'b', &exists);
+        ok(hr == S_OK, "got 0x%08x\n", hr);
+        ok(exists, "got %d\n", exists);
 
-    IDWriteFont_Release(font);
-}
+        IDWriteFont_Release(font);
+    }
     /* Try with explicit collection, Tahoma will be forced. */
     /* 1. Latin part */
     g_source = str2W;
@@ -4768,7 +4744,10 @@ if (font) {
     IDWriteLocalizedStrings_Release(strings);
     IDWriteFont_Release(font);
 
-    /* 2. Hiragana character, force Tahoma font does not support Japanese */
+    /**
+     * 2. Hiragana character. Tahoma is requested, but it doesn't support
+     * Japanese. A NULL font is returned if there is no fallback for Japanese.
+     */
     g_source = str2W;
     mappedlength = 0;
     scale = 0.0f;
@@ -4778,17 +4757,19 @@ if (font) {
     ok(hr == S_OK, "got 0x%08x\n", hr);
     ok(mappedlength == 1, "got %u\n", mappedlength);
     ok(scale == 1.0f, "got %f\n", scale);
-    ok(font != NULL, "got %p\n", font);
 
-    exists = FALSE;
-    hr = IDWriteFont_GetInformationalStrings(font, DWRITE_INFORMATIONAL_STRING_WIN32_FAMILY_NAMES, &strings, &exists);
-    ok(hr == S_OK && exists, "got 0x%08x, exists %d\n", hr, exists);
-    hr = IDWriteLocalizedStrings_GetString(strings, 0, buffW, ARRAY_SIZE(buffW));
-    ok(hr == S_OK, "got 0x%08x\n", hr);
-todo_wine
-    ok(lstrcmpW(buffW, tahomaW), "%s\n", wine_dbgstr_w(buffW));
-    IDWriteLocalizedStrings_Release(strings);
-    IDWriteFont_Release(font);
+    if (!font) {
+        skip("Missing system font for Japanese.\n");
+    } else {
+        exists = FALSE;
+        hr = IDWriteFont_GetInformationalStrings(font, DWRITE_INFORMATIONAL_STRING_WIN32_FAMILY_NAMES, &strings, &exists);
+        ok(hr == S_OK && exists, "got 0x%08x, exists %d\n", hr, exists);
+        hr = IDWriteLocalizedStrings_GetString(strings, 0, buffW, ARRAY_SIZE(buffW));
+        ok(hr == S_OK, "got 0x%08x\n", hr);
+        ok(lstrcmpW(buffW, tahomaW), "%s\n", wine_dbgstr_w(buffW));
+        IDWriteLocalizedStrings_Release(strings);
+        IDWriteFont_Release(font);
+    }
 
     IDWriteFontFallback_Release(fallback);
     IDWriteFactory2_Release(factory2);
@@ -5751,34 +5732,22 @@ static void test_GetMetrics_with_custom_fontcollection(void)
     ok(hr == S_OK, "got 0x%08x\n", hr);
     count = 9999;
     hr = IDWriteTextLayout_GetClusterMetrics(layout, clusters, 4, &count);
-    todo_wine
     ok(hr == S_OK, "got 0x%08x\n", hr);
-    todo_wine
     ok(count == 4, "got %u\n", count);
     for (i = 0, width = 0.0; i < count; i++)
         width += clusters[i].width;
     memset(&metrics, 0xcc, sizeof(metrics));
     hr = IDWriteTextLayout_GetMetrics(layout, &metrics);
-    todo_wine
     ok(hr == S_OK, "got 0x%08x\n", hr);
-    todo_wine
     ok(metrics.left == 0.0, "got %.2f\n", metrics.left);
-    todo_wine
     ok(metrics.top == 0.0, "got %.2f\n", metrics.top);
-    todo_wine
     ok(metrics.width == width, "got %.2f, expected %.2f\n", metrics.width, width);
-    todo_wine
     ok(metrics.widthIncludingTrailingWhitespace == width, "got %.2f, expected %.2f\n",
         metrics.widthIncludingTrailingWhitespace, width);
-    todo_wine
     ok(metrics.height > 0.0, "got %.2f\n", metrics.height);
-    todo_wine
     ok(metrics.layoutWidth == 1000.0, "got %.2f\n", metrics.layoutWidth);
-    todo_wine
     ok(metrics.layoutHeight == 1000.0, "got %.2f\n", metrics.layoutHeight);
-    todo_wine
     ok(metrics.maxBidiReorderingDepth == 1, "got %u\n", metrics.maxBidiReorderingDepth);
-    todo_wine
     ok(metrics.lineCount == 1, "got %u\n", metrics.lineCount);
     IDWriteTextLayout_Release(layout);
 
