@@ -620,6 +620,7 @@ static HRESULT WINAPI testrenderer_DrawUnderline(IDWriteTextRenderer *iface,
 {
     struct renderer_context *ctxt = (struct renderer_context*)context;
     struct drawcall_entry entry = { 0 };
+    static const WCHAR gohaW[] = {'G','o','h','a','-','T','i','b','e','b',' ','Z','e','m','e','n',0};
 
     if (ctxt)
         TEST_MEASURING_MODE(ctxt, underline->measuringMode);
@@ -635,9 +636,13 @@ static HRESULT WINAPI testrenderer_DrawUnderline(IDWriteTextRenderer *iface,
         IDWriteFontFace_GetMetrics(fontface, &metrics);
 
         ok(emsize == metrics.designUnitsPerEm, "Unexpected font size %f\n", emsize);
-        /* Expected height is in design units, allow some absolute difference from it. Seems to only happen on Vista */
-        ok(fabs(metrics.capHeight - underline->runHeight) < 2.0f, "Expected runHeight %u, got %f, family %s\n",
-                metrics.capHeight, underline->runHeight, wine_dbgstr_w(ctxt->familyW));
+        if (lstrcmpW(gohaW, ctxt->familyW)) {
+            /* Expected height is in design units, allow some absolute difference from it. Seems to only happen on Vista */
+            ok(fabs(metrics.capHeight - underline->runHeight) < 2.0f, "Expected runHeight %u, got %f, family %s\n",
+                    metrics.capHeight, underline->runHeight, wine_dbgstr_w(ctxt->familyW));
+        } else {
+            skip("%s is an invalid font, rejected by windows.\n", wine_dbgstr_w(gohaW));
+        }
 
         IDWriteFontFace_Release(fontface);
     }
