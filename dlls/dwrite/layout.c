@@ -822,7 +822,8 @@ static HRESULT layout_resolve_fonts(struct dwrite_textlayout *layout)
     LIST_FOR_EACH_ENTRY(r, &layout->runs, struct layout_run, entry) {
         struct regular_layout_run *run = &r->u.regular;
         IDWriteFont *font;
-        UINT32 length;
+        UINT32 length, mapped_length;
+        FLOAT scale;
 
         if (r->kind == LAYOUT_RUN_INLINE)
             continue;
@@ -830,12 +831,19 @@ static HRESULT layout_resolve_fonts(struct dwrite_textlayout *layout)
         range = get_layout_range_by_pos(layout, run->descr.textPosition);
 
         if (run->sa.shapes == DWRITE_SCRIPT_SHAPES_NO_VISUAL) {
-            IDWriteFontCollection *collection;
-
-            collection = range->collection ? range->collection : sys_collection;
-
-            if (FAILED(hr = create_matching_font(collection, range->fontfamily, range->weight, range->style,
-                    range->stretch, &font))) {
+            hr = IDWriteFontFallback_MapCharacters(fallback,
+                (IDWriteTextAnalysisSource *)&layout->IDWriteTextAnalysisSource1_iface,
+                run->descr.textPosition,
+                run->descr.stringLength,
+                range->collection,
+                range->fontfamily,
+                range->weight,
+                range->style,
+                range->stretch,
+                &mapped_length,
+                &font,
+                &scale);
+            if (FAILED(hr)) {
                 WARN("%s: failed to create matching font for non visual run, family %s, collection %p\n",
                         debugstr_rundescr(&run->descr), debugstr_w(range->fontfamily), range->collection);
                 break;
