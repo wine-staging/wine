@@ -919,6 +919,12 @@ static BOOL motion_event( HWND hwnd, XEvent *event )
                                             (abs(motion->axis_data[3]),
                                              abs(motion->axis_data[4])))
                                            * (gMsgPacket.pkStatus & TPS_INVERT?-1:1));
+
+    if (gMsgPacket.pkOrientation.orAltitude < 0)
+    {
+        FIXME("Negative orAltitude detected\n");
+        return FALSE;
+    }
     gMsgPacket.pkNormalPressure = motion->axis_data[2];
     gMsgPacket.pkButtons = get_button_state(curnum);
     gMsgPacket.pkChanged = get_changed_state(&gMsgPacket);
@@ -950,6 +956,12 @@ static BOOL button_event( HWND hwnd, XEvent *event )
     gMsgPacket.pkOrientation.orAltitude = ((1000 - 15 * max(abs(button->axis_data[3]),
                                                             abs(button->axis_data[4])))
                                            * (gMsgPacket.pkStatus & TPS_INVERT?-1:1));
+    if (gMsgPacket.pkOrientation.orAltitude < 0)
+    {
+        FIXME("Negative orAltitude detected\n");
+        return FALSE;
+    }
+
     gMsgPacket.pkNormalPressure = button->axis_data[2];
     gMsgPacket.pkButtons = get_button_state(curnum);
     gMsgPacket.pkChanged = get_changed_state(&gMsgPacket);
@@ -992,6 +1004,11 @@ static BOOL proximity_event( HWND hwnd, XEvent *event )
     gMsgPacket.pkOrientation.orAltitude = ((1000 - 15 * max(abs(proximity->axis_data[3]),
                                                             abs(proximity->axis_data[4])))
                                            * (gMsgPacket.pkStatus & TPS_INVERT?-1:1));
+    if (gMsgPacket.pkOrientation.orAltitude < 0)
+    {
+        FIXME("Negative orAltitude detected\n");
+        return FALSE;
+    }
     gMsgPacket.pkNormalPressure = proximity->axis_data[2];
     gMsgPacket.pkButtons = get_button_state(curnum);
 
