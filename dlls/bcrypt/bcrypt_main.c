@@ -160,6 +160,12 @@ NTSTATUS WINAPI BCryptGenRandom(BCRYPT_ALG_HANDLE handle, UCHAR *buffer, ULONG c
     return STATUS_NOT_IMPLEMENTED;
 }
 
+NTSTATUS WINAPI BCryptGenerateKeyPair(BCRYPT_ALG_HANDLE algorithm, BCRYPT_KEY_HANDLE *handle, ULONG input_len, ULONG flags)
+{
+    FIXME("%p, %p, %u, %08x - stub\n", algorithm, handle, input_len, flags);
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS WINAPI BCryptOpenAlgorithmProvider( BCRYPT_ALG_HANDLE *handle, LPCWSTR id, LPCWSTR implementation, DWORD flags )
 {
     const DWORD supported_flags = BCRYPT_ALG_HANDLE_HMAC_FLAG;
