@@ -166,6 +166,12 @@ NTSTATUS WINAPI BCryptGenerateKeyPair(BCRYPT_ALG_HANDLE algorithm, BCRYPT_KEY_HA
     return STATUS_SUCCESS;
 }
 
+NTSTATUS WINAPI BCryptFinalizeKeyPair(BCRYPT_KEY_HANDLE key, ULONG dwflags)
+{
+    FIXME("%p, %08x - stub\n", key, dwflags);
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS WINAPI BCryptOpenAlgorithmProvider( BCRYPT_ALG_HANDLE *handle, LPCWSTR id, LPCWSTR implementation, DWORD flags )
 {
     const DWORD supported_flags = BCRYPT_ALG_HANDLE_HMAC_FLAG;

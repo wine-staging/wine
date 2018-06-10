@@ -22,7 +22,7 @@
 @ stub BCryptEnumProviders
 @ stub BCryptEnumRegisteredProviders
 @ stdcall BCryptExportKey(ptr ptr wstr ptr long ptr long)
-@ stub BCryptFinalizeKeyPair
+@ stdcall BCryptFinalizeKeyPair(ptr long)
 @ stdcall BCryptFinishHash(ptr ptr long long)
 @ stub BCryptFreeBuffer
 @ stdcall BCryptGenRandom(ptr ptr long long)
