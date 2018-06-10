@@ -125,6 +125,7 @@ enum alg_id
     ALG_ID_SHA256,
     ALG_ID_SHA384,
     ALG_ID_SHA512,
+    ALG_ID_ECDH_P256,
     ALG_ID_ECDSA_P256,
     ALG_ID_ECDSA_P384,
 };
