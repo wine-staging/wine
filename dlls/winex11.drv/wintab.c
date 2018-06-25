@@ -1210,6 +1210,62 @@ UINT CDECL X11DRV_WTInfoW(UINT wCategory, UINT nIndex, LPVOID lpOutput)
                     rc = 0;
             }
             break;
+        case WTI_STATUS:
+            switch (nIndex)
+            {
+                case STA_CONTEXTS:
+                {
+                    FIXME("STA_CONTEXTS unhandled\n");
+                    rc = 1;
+                    break;
+                }
+                case STA_SYSCTXS:
+                {
+                    FIXME("STA_SYSCTXS unhandled\n");
+                    rc = 1;
+                    break;
+                }
+                case STA_PKTRATE:
+                {
+                    FIXME("STA_PKTRATE unhandled\n");
+                    rc = 0;
+                    break;
+                }
+                case STA_PKTDATA:
+                {
+                    FIXME("STA_PKTDATA unhandled\n");
+                    rc = 0;
+                    break;
+                }
+                case STA_MANAGERS:
+                {
+                    FIXME("STA_MANAGERS unhandled\n");
+                    rc = 1;
+                    break;
+                }
+                case STA_SYSTEM:
+                {
+                    FIXME("STA_SYSTEM unhandled\n");
+                    rc = TRUE;
+                    break;
+                }
+                case STA_BUTTONUSE:
+                {
+                    FIXME("STA_BUTTONUSE unhandled\n");
+                    rc = 0;
+                    break;
+                }
+                case STA_SYSBTNUSE:
+                {
+                    FIXME("STA_SYSBTNUSE unhandled\n");
+                    rc = 0;
+                    break;
+                }
+                default:
+                    FIXME("WTI_STATUS unhandled index %i\n",nIndex);
+                    rc = 0;
+            }
+            break;
         case WTI_DEFSYSCTX:
         case WTI_DDCTXS:
         case WTI_DEFCONTEXT:
