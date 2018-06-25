@@ -1156,6 +1156,17 @@ UINT CDECL X11DRV_WTInfoW(UINT wCategory, UINT nIndex, LPVOID lpOutput)
 
     if (!xinput_handle) return 0;
 
+    if(wCategory >= WTI_DSCTXS)
+    {
+        nIndex = wCategory - WTI_DSCTXS;
+        wCategory = WTI_DSCTXS;
+    }
+    else if(wCategory >= WTI_DDCTXS)
+    {
+        nIndex = wCategory - WTI_DDCTXS;
+        wCategory = WTI_DDCTXS;
+    }
+
     switch(wCategory)
     {
         case 0:
