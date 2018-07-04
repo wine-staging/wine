@@ -91,3 +91,34 @@ HRESULT WINAPI PathCchCombineEx(WCHAR *out, SIZE_T size, const WCHAR *path1, con
     strcpyW(out, result);
     return S_OK;
 }
+
+HRESULT WINAPI PathCchRemoveBackslash(WCHAR *path, SIZE_T size)
+{
+    return PathCchRemoveBackslashEx(path, size, NULL, NULL);
+}
+
+HRESULT WINAPI PathCchRemoveBackslashEx(WCHAR *path, SIZE_T size, WCHAR **endptr, SIZE_T *remaining)
+{
+    BOOL needs_trim;
+    SIZE_T length;
+
+    TRACE("%s, %lu, %p, %p\n", debugstr_w(path), size, endptr, remaining);
+
+    if (!path) return E_INVALIDARG;
+    length = strlenW(path);
+    needs_trim = size && length && path[length - 1] == '\\';
+
+    if (needs_trim && (length > 1) && path[length - 2] == ':')
+        needs_trim = 0;
+
+    if (needs_trim)
+    {
+        path[length - 1] = 0;
+        --length;
+    }
+
+    if (endptr) *endptr = path + length;
+    if (remaining) *remaining = size - length;
+
+    return needs_trim ? S_OK : S_FALSE;
+}

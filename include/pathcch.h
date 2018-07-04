@@ -25,4 +25,6 @@
 
 HRESULT WINAPI PathCchAddBackslash(WCHAR *path, SIZE_T size);
 HRESULT WINAPI PathCchAddBackslashEx(WCHAR *path, SIZE_T size, WCHAR **end, SIZE_T *remaining);
+HRESULT WINAPI PathCchRemoveBackslash(WCHAR *path, SIZE_T size);
+HRESULT WINAPI PathCchRemoveBackslashEx(WCHAR *path, SIZE_T size, WCHAR **end, SIZE_T *remaining);
 HRESULT WINAPI PathCchCombineEx(WCHAR *out, SIZE_T size, const WCHAR *path1, const WCHAR *path2, DWORD flags);

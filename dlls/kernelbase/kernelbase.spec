@@ -1040,8 +1040,8 @@
 @ stdcall PathCchCombineEx(ptr long ptr ptr long)
 # @ stub PathCchFindExtension
 # @ stub PathCchIsRoot
-# @ stub PathCchRemoveBackslash
-# @ stub PathCchRemoveBackslashEx
+@ stdcall PathCchRemoveBackslash(wstr long)
+@ stdcall PathCchRemoveBackslashEx(wstr long ptr ptr)
 # @ stub PathCchRemoveExtension
 # @ stub PathCchRemoveFileSpec
 # @ stub PathCchRenameExtension

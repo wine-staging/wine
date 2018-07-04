@@ -11,8 +11,8 @@
 @ stdcall PathCchCombineEx(ptr long ptr ptr long) kernelbase.PathCchCombineEx
 @ stub PathCchFindExtension
 @ stub PathCchIsRoot
-@ stub PathCchRemoveBackslash
-@ stub PathCchRemoveBackslashEx
+@ stdcall PathCchRemoveBackslash(wstr long) kernelbase.PathCchRemoveBackslash
+@ stdcall PathCchRemoveBackslashEx(wstr long ptr ptr) kernelbase.PathCchRemoveBackslashEx
 @ stub PathCchRemoveExtension
 @ stub PathCchRemoveFileSpec
 @ stub PathCchRenameExtension

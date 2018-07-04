@@ -31,6 +31,8 @@
 
 HRESULT (WINAPI *pPathCchAddBackslash)(WCHAR *out, SIZE_T size);
 HRESULT (WINAPI *pPathCchAddBackslashEx)(WCHAR *out, SIZE_T size, WCHAR **endptr, SIZE_T *remaining);
+HRESULT (WINAPI *pPathCchRemoveBackslash)(WCHAR *out, SIZE_T size);
+HRESULT (WINAPI *pPathCchRemoveBackslashEx)(WCHAR *out, SIZE_T size, WCHAR **endptr, SIZE_T *remaining);
 HRESULT (WINAPI *pPathCchCombineEx)(WCHAR *out, SIZE_T size, const WCHAR *path1, const WCHAR *path2, DWORD flags);
 
 static const struct
@@ -245,6 +247,127 @@ static void test_PathCchAddBackslashEx(void)
     }
 }
 
+struct removebackslash_test
+{
+    const char *path;
+    const char *result;
+    HRESULT hr;
+    SIZE_T size;
+    SIZE_T remaining;
+};
+
+static const struct removebackslash_test removebackslash_tests[] =
+{
+    { "C:\\",    "C:\\", S_FALSE, MAX_PATH, MAX_PATH - 3 },
+    { "a.txt\\", "a.txt", S_OK, MAX_PATH, MAX_PATH - 5 },
+    { "a/b\\",   "a/b",   S_OK, MAX_PATH, MAX_PATH - 3 },
+    { "C:\\temp\\wine.txt", "C:\\temp\\wine.txt", S_FALSE, MAX_PATH, MAX_PATH - 16 },
+};
+
+static void test_PathCchRemoveBackslash(void)
+{
+    WCHAR pathW[MAX_PATH];
+    unsigned int i;
+    HRESULT hr;
+
+    if (!pPathCchRemoveBackslash)
+    {
+        win_skip("PathCchRemoveBackslash() is not available.\n");
+        return;
+    }
+
+    pathW[0] = 0;
+    hr = pPathCchRemoveBackslash(0, 0);
+    ok(hr == E_INVALIDARG, "Unexpected hr %#x.\n", hr);
+    ok(pathW[0] == 0, "Unexpected path.\n");
+
+    pathW[0] = 0;
+    hr = pPathCchRemoveBackslash(pathW, 1);
+    ok(hr == S_FALSE, "Unexpected hr %#x.\n", hr);
+    ok(pathW[0] == 0, "Unexpected path.\n");
+
+    pathW[0] = 0;
+    hr = pPathCchRemoveBackslash(pathW, 2);
+    ok(hr == S_FALSE, "Unexpected hr %#x.\n", hr);
+    ok(pathW[0] == 0, "Unexpected path.\n");
+
+    for (i = 0; i < ARRAY_SIZE(removebackslash_tests); i++)
+    {
+        const struct removebackslash_test *test = &removebackslash_tests[i];
+        char path[MAX_PATH];
+
+        MultiByteToWideChar(CP_ACP, 0, test->path, -1, pathW, ARRAY_SIZE(pathW));
+        hr = pPathCchRemoveBackslash(pathW, test->size);
+        ok(hr == test->hr, "%u: unexpected return value %#x.\n", i, hr);
+
+        WideCharToMultiByte(CP_ACP, 0, pathW, -1, path, ARRAY_SIZE(path), NULL, NULL);
+        ok(!strcmp(path, test->result), "%u: unexpected resulting path %s.\n", i, path);
+    }
+}
+
+static void test_PathCchRemoveBackslashEx(void)
+{
+    WCHAR pathW[MAX_PATH];
+    SIZE_T remaining;
+    unsigned int i;
+    HRESULT hr;
+    WCHAR *ptrW;
+
+    if (!pPathCchRemoveBackslashEx)
+    {
+        win_skip("PathCchRemoveBackslashEx() is not available.\n");
+        return;
+    }
+
+    pathW[0] = 0;
+    hr = pPathCchRemoveBackslashEx(0, 0, NULL, NULL);
+    ok(hr == E_INVALIDARG, "Unexpected hr %#x.\n", hr);
+    ok(pathW[0] == 0, "Unexpected path.\n");
+
+    pathW[0] = 0;
+    ptrW = (void *)0xdeadbeef;
+    remaining = 123;
+    hr = pPathCchRemoveBackslashEx(pathW, 1, &ptrW, &remaining);
+    ok(hr == S_FALSE, "Unexpected hr %#x.\n", hr);
+    ok(pathW[0] == 0, "Unexpected path.\n");
+    ok(ptrW == pathW, "Unexpected endptr %p.\n", ptrW);
+    ok(remaining == 1, "Unexpected remaining size.\n");
+
+    pathW[0] = 0;
+    hr = pPathCchRemoveBackslashEx(pathW, 2, NULL, NULL);
+    ok(hr == S_FALSE, "Unexpected hr %#x.\n", hr);
+    ok(pathW[0] == 0, "Unexpected path.\n");
+
+    for (i = 0; i < ARRAY_SIZE(removebackslash_tests); i++)
+    {
+        const struct removebackslash_test *test = &removebackslash_tests[i];
+        char path[MAX_PATH];
+
+        MultiByteToWideChar(CP_ACP, 0, test->path, -1, pathW, ARRAY_SIZE(pathW));
+        hr = pPathCchRemoveBackslashEx(pathW, test->size, NULL, NULL);
+        ok(hr == test->hr, "%u: unexpected return value %#x.\n", i, hr);
+
+        WideCharToMultiByte(CP_ACP, 0, pathW, -1, path, ARRAY_SIZE(path), NULL, NULL);
+        ok(!strcmp(path, test->result), "%u: unexpected resulting path %s.\n", i, path);
+
+        ptrW = (void *)0xdeadbeef;
+        remaining = 123;
+        MultiByteToWideChar(CP_ACP, 0, test->path, -1, pathW, ARRAY_SIZE(pathW));
+        hr = pPathCchRemoveBackslashEx(pathW, test->size, &ptrW, &remaining);
+        ok(hr == test->hr, "%u: unexpected return value %#x.\n", i, hr);
+        if (SUCCEEDED(hr))
+        {
+            ok(ptrW == (pathW + lstrlenW(pathW)), "%u: unexpected end pointer.\n", i);
+            ok(remaining == test->remaining, "%u: unexpected remaining buffer length.\n", i);
+        }
+        else
+        {
+            ok(ptrW == NULL, "%u: unexpecred end pointer.\n", i);
+            ok(remaining == 0, "%u: unexpected remaining buffer length.\n", i);
+        }
+    }
+}
+
 START_TEST(path)
 {
     HMODULE hmod = LoadLibraryA("kernelbase.dll");
@@ -252,8 +375,12 @@ START_TEST(path)
     pPathCchCombineEx = (void *)GetProcAddress(hmod, "PathCchCombineEx");
     pPathCchAddBackslash = (void *)GetProcAddress(hmod, "PathCchAddBackslash");
     pPathCchAddBackslashEx = (void *)GetProcAddress(hmod, "PathCchAddBackslashEx");
+    pPathCchRemoveBackslash = (void *)GetProcAddress(hmod, "PathCchRemoveBackslash");
+    pPathCchRemoveBackslashEx = (void *)GetProcAddress(hmod, "PathCchRemoveBackslashEx");
 
     test_PathCchCombineEx();
     test_PathCchAddBackslash();
     test_PathCchAddBackslashEx();
+    test_PathCchRemoveBackslash();
+    test_PathCchRemoveBackslashEx();
 }
