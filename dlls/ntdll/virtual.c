@@ -3103,6 +3103,7 @@ NTSTATUS WINAPI NtQueryVirtualMemory( HANDLE process, LPCVOID addr,
 
         UNIMPLEMENTED_INFO_CLASS(MemoryWorkingSetList);
         UNIMPLEMENTED_INFO_CLASS(MemoryBasicVlmInformation);
+        UNIMPLEMENTED_INFO_CLASS(MemoryWorkingSetExInformation);
 
         default:
             FIXME("(%p,%p,info_class=%d,%p,%ld,%p) Unknown information class\n",
