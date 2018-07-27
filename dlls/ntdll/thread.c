@@ -66,7 +66,7 @@ void (WINAPI *kernel32_start_process)(LPTHREAD_START_ROUTINE,void*) = NULL;
 struct startup_info
 {
     TEB                            *teb;
-    PRTL_THREAD_START_ROUTINE       entry_point;
+    LPTHREAD_START_ROUTINE          entry_point;
     void                           *entry_arg;
 };
 
@@ -670,7 +670,7 @@ static void start_thread( struct startup_info *info )
 
     signal_init_thread( teb );
     server_init_thread( info->entry_point, &suspend );
-    signal_start_thread( (LPTHREAD_START_ROUTINE)info->entry_point, info->entry_arg, suspend );
+    signal_start_thread( info->entry_point, info->entry_arg, suspend );
 }
 
 

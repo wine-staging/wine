@@ -1497,6 +1497,9 @@
 @ cdecl wine_server_send_fd(long)
 @ cdecl __wine_make_process_system()
 
+# Loader
+@ cdecl __wine_ldr_start_process(ptr)
+
 # Virtual memory
 @ cdecl __wine_locked_recvmsg(long ptr long)
 

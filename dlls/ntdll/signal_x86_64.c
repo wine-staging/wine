@@ -4474,7 +4474,7 @@ PCONTEXT DECLSPEC_HIDDEN attach_thread( LPTHREAD_START_ROUTINE entry, void *arg,
         init_thread_context( ctx, entry, arg, relay );
     }
     ctx->ContextFlags = CONTEXT_FULL;
-    attach_dlls( ctx, (void **)&ctx->Rcx );
+    LdrInitializeThunk( ctx, (ULONG_PTR)&ctx->Rcx, 0, 0 );
     return ctx;
 }
 

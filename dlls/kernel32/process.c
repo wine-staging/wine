@@ -74,6 +74,8 @@ extern char **__wine_main_environ;
 static char **__wine_get_main_environment(void) { return __wine_main_environ; }
 #endif
 
+extern void __wine_ldr_start_process(void *kernel_start);
+
 typedef struct
 {
     LPSTR lpEnvAddress;
@@ -1495,7 +1497,7 @@ void CDECL __wine_kernel_init(void)
 
     if (!params->CurrentDirectory.Handle) chdir("/"); /* avoid locking removable devices */
 
-    LdrInitializeThunk( start_process_wrapper, 0, 0, 0 );
+    __wine_ldr_start_process( start_process_wrapper );
 
  error:
     ExitProcess( GetLastError() );
