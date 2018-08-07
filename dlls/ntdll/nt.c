@@ -2606,9 +2606,22 @@ NTSTATUS WINAPI NtQuerySystemInformation(
         }
         break;
     case SystemModuleInformation:
-        /* FIXME: should be system-wide */
-        if (!SystemInformation) ret = STATUS_ACCESS_VIOLATION;
-        else ret = LdrQueryProcessModuleInformation( SystemInformation, Length, &len );
+        if (!SystemInformation)
+            ret = STATUS_ACCESS_VIOLATION;
+        else if (Length < FIELD_OFFSET( SYSTEM_MODULE_INFORMATION, Modules[1] ))
+        {
+            len = FIELD_OFFSET( SYSTEM_MODULE_INFORMATION, Modules[1] );
+            ret = STATUS_INFO_LENGTH_MISMATCH;
+        }
+        else
+        {
+            SYSTEM_MODULE_INFORMATION *smi = SystemInformation;
+
+            FIXME("returning fake driver list\n");
+            smi->ModulesCount = 1;
+            memset(&smi->Modules[0], 0, sizeof(smi->Modules[0]));
+            ret = STATUS_SUCCESS;
+        }
         break;
     case SystemHandleInformation:
         {
