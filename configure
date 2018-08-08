@@ -1617,6 +1617,7 @@ enable_wmp
 enable_wmphoto
 enable_wmvcore
 enable_wnaspi32
+enable_wow64cpu
 enable_wpc
 enable_wpcap
 enable_ws2_32
@@ -19971,6 +19972,7 @@ wine_fn_config_makefile dlls/wmvcore enable_wmvcore
 wine_fn_config_makefile dlls/wmvcore/tests enable_tests
 wine_fn_config_makefile dlls/wnaspi32 enable_wnaspi32
 wine_fn_config_makefile dlls/wow32 enable_win16
+wine_fn_config_makefile dlls/wow64cpu enable_wow64cpu
 wine_fn_config_makefile dlls/wpc enable_wpc
 wine_fn_config_makefile dlls/wpc/tests enable_tests
 wine_fn_config_makefile dlls/wpcap enable_wpcap
