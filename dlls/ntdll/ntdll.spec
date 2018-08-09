@@ -1039,6 +1039,7 @@
 @ stdcall WinSqmIsOptedIn()
 @ stdcall WinSqmSetDWORD(ptr long long)
 @ stdcall WinSqmStartSession(ptr long long)
+@ extern Wow64Transition
 @ stdcall -private ZwAcceptConnectPort(ptr long ptr long ptr ptr) NtAcceptConnectPort
 @ stdcall -private ZwAccessCheck(ptr long long ptr ptr ptr ptr ptr) NtAccessCheck
 @ stdcall -private ZwAccessCheckAndAuditAlarm(ptr long ptr ptr ptr long ptr long ptr ptr ptr) NtAccessCheckAndAuditAlarm

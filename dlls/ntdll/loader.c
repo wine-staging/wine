@@ -3800,15 +3800,17 @@ BOOL WINAPI DllMain( HINSTANCE inst, DWORD reason, LPVOID reserved )
     return TRUE;
 }
 
+void *Wow64Transition;
 
 /***********************************************************************
  *           __wine_process_init
  */
 void __wine_process_init(void)
 {
+    static const WCHAR wow64cpuW[] = {'w','o','w','6','4','c','p','u','.','d','l','l',0};
     static const WCHAR kernel32W[] = {'k','e','r','n','e','l','3','2','.','d','l','l',0};
 
-    WINE_MODREF *wm;
+    WINE_MODREF *wm, *wow64cpu_wm;
     NTSTATUS status;
     ANSI_STRING func_name;
     void (* DECLSPEC_NORETURN CDECL init_func)(void);
@@ -3823,6 +3825,11 @@ void __wine_process_init(void)
 
     /* setup the load callback and create ntdll modref */
     wine_dll_set_callback( load_builtin_callback );
+
+    if ((status = load_builtin_dll( NULL, wow64cpuW, 0, 0, &wow64cpu_wm )) == STATUS_SUCCESS)
+        Wow64Transition = wow64cpu_wm->ldr.BaseAddress;
+    else
+        WARN( "could not load wow64cpu.dll, status %#x\n", status );
 
     if ((status = load_builtin_dll( NULL, kernel32W, 0, 0, &wm )) != STATUS_SUCCESS)
     {
