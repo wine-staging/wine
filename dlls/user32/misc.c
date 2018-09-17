@@ -741,6 +741,18 @@ BOOL WINAPI RegisterTouchHitTestingWindow(HWND hwnd, ULONG value)
     return TRUE;
 }
 
+/**********************************************************************
+ * GetPointerType [USER32.@]
+ */
+BOOL WINAPI GetPointerType(UINT32 id, POINTER_INPUT_TYPE *type)
+{
+    FIXME("(%d %p): stub\n", id, type);
+    if(!type)
+        return FALSE;
+
+    *type = PT_MOUSE;
+    return TRUE;
+}
 
 static const WCHAR imeW[] = {'I','M','E',0};
 const struct builtin_class_descr IME_builtin_class =

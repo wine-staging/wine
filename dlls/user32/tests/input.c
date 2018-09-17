@@ -78,6 +78,7 @@ static struct {
 } key_status;
 
 static UINT (WINAPI *pSendInput) (UINT, INPUT*, size_t);
+static BOOL (WINAPI *pGetPointerType)(UINT32, POINTER_INPUT_TYPE*);
 static int (WINAPI *pGetMouseMovePointsEx) (UINT, LPMOUSEMOVEPOINT, LPMOUSEMOVEPOINT, int, DWORD);
 static UINT (WINAPI *pGetRawInputDeviceList) (PRAWINPUTDEVICELIST, PUINT, UINT);
 static int  (WINAPI *pGetWindowRgnBox)(HWND, LPRECT);
@@ -163,6 +164,7 @@ static void init_function_pointers(void)
       trace("GetProcAddress(%s) failed\n", #func);
 
     GET_PROC(SendInput)
+    GET_PROC(GetPointerType)
     GET_PROC(GetMouseMovePointsEx)
     GET_PROC(GetRawInputDeviceList)
     GET_PROC(GetWindowRgnBox)
@@ -2874,6 +2876,16 @@ static void test_OemKeyScan(void)
     }
 }
 
+static void test_GetPointerType(void)
+{
+    BOOL ret;
+    POINTER_INPUT_TYPE type = -1;
+
+    ret = pGetPointerType(1, &type);
+    ok(ret, "GetPointerType failed, got type %d for 1\n", type );
+    ok(type != -1, " type %d\n", type );
+}
+
 START_TEST(input)
 {
     init_function_pointers();
@@ -2908,4 +2920,9 @@ START_TEST(input)
         test_GetRawInputDeviceList();
     else
         win_skip("GetRawInputDeviceList is not available\n");
+
+    if(pGetPointerType)
+        test_GetPointerType();
+    else
+        win_skip("GetPointerType is not available\n");
 }
