@@ -2379,11 +2379,13 @@ void wined3d_texture_download_data(struct wined3d_texture *texture, unsigned int
 {
     const struct wined3d_gl_info *gl_info = context->gl_info;
     const struct wined3d_format_gl *format_gl;
+    struct wined3d_texture_sub_resource *sub_resource;
     unsigned int level;
     GLenum target;
 
     format_gl = wined3d_format_gl(texture->resource.format);
     target = wined3d_texture_get_sub_resource_target(texture, sub_resource_idx);
+    sub_resource = &texture->sub_resources[sub_resource_idx];
     level = sub_resource_idx % texture->level_count;
 
     if (texture->resource.type == WINED3D_RTYPE_TEXTURE_2D
@@ -2416,6 +2418,23 @@ void wined3d_texture_download_data(struct wined3d_texture *texture, unsigned int
 
         GL_EXTCALL(glGetCompressedTexImage(target, level, data->addr));
         checkGLcall("glGetCompressedTexImage");
+    }
+    else if (data->buffer_object && texture->resource.usage & WINED3DUSAGE_RENDERTARGET)
+    {
+        /* PBO texture download is not accelerated on Mesa. Use glReadPixels if possible. */
+        TRACE("Downloading (glReadPixels) texture %p, %u, level %u, format %#x, type %#x, data %p.\n",
+                texture, sub_resource_idx, level, format_gl->format, format_gl->type, data->addr);
+
+        context_apply_fbo_state_blit(context, GL_READ_FRAMEBUFFER, &texture->resource, sub_resource_idx, NULL,
+                0, sub_resource->locations & (WINED3D_LOCATION_TEXTURE_RGB | WINED3D_LOCATION_TEXTURE_SRGB));
+        context_check_fbo_status(context, GL_READ_FRAMEBUFFER);
+        context_invalidate_state(context, STATE_FRAMEBUFFER);
+        gl_info->gl_ops.gl.p_glReadBuffer(GL_COLOR_ATTACHMENT0);
+        checkGLcall("glReadBuffer()");
+
+        gl_info->gl_ops.gl.p_glReadPixels(0, 0, wined3d_texture_get_level_width(texture, level),
+                wined3d_texture_get_level_height(texture, level), format_gl->format, format_gl->type, data->addr);
+        checkGLcall("glReadPixels");
     }
     else
     {
