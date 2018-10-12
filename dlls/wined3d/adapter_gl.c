@@ -1266,8 +1266,14 @@ static enum wined3d_feature_level feature_level_from_caps(const struct wined3d_g
     shader_model = min(shader_model, max(shader_caps->hs_version, 4));
     shader_model = min(shader_model, max(shader_caps->ds_version, 4));
 
+    /*
+     * Legacy nVidia driver doesn't the the ARB_POLYGON_OFFSET_CLAMP support.
+     * There is an implied support for Depth Bias Clamping in DirectX 10 but no real documenation for either case
+     * On the same hardware, on windows, it supports DirectX 10 without the need for this extension, So
+     *  removing this check and users can deal with the fact they might have minor artifacts from time to time.
+     */
     if (gl_info->supported[WINED3D_GL_VERSION_3_2]
-            && gl_info->supported[ARB_POLYGON_OFFSET_CLAMP]
+/*            && gl_info->supported[ARB_POLYGON_OFFSET_CLAMP]*/
             && gl_info->supported[ARB_SAMPLER_OBJECTS])
     {
         if (shader_model >= 5
