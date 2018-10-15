@@ -4135,3 +4135,15 @@ BOOL WINAPI SetupDiGetDevicePropertyW(HDEVINFO info_set, PSP_DEVINFO_DATA info_d
     SetLastError(ERROR_NOT_FOUND);
     return FALSE;
 }
+
+/***********************************************************************
+ *              SetupDiInstallDeviceInterfaces (SETUPAPI.@)
+ */
+BOOL WINAPI SetupDiInstallDeviceInterfaces(HDEVINFO dev, PSP_DEVINFO_DATA info_data)
+{
+    FIXME("%p, %p stub\n", dev, info_data);
+
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
+}
+
